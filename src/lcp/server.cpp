@@ -1,5 +1,4 @@
 #include "config.hpp"
-#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <sys/socket.h>
@@ -41,5 +40,18 @@ void server(char *sock) {
   }
 
   // Accept (E-Poll)
+
+  // Instead of using threads 
+  // Use non-blocking read with Edge triggered Epoll
+  // Maintain a FIFO queue (using  Linked list)
+  // Loop through the readyFds -> If not already present in the queue 
+  // -> Add them -> Loop through the queue -> Process each client socket 
+  // i.e., read 1023 bytes & if more data is present -> Add to the queue
+  // Once the queue is processed -> Re-check epoll_wait & repeat.
+  
+  // TODO: 
+  // Ensure the edge cases & processing time complexity & if this can lead to starvation of any kind 
+  // Learn about level triggered & how does it compare to Edge triggered & what will be the flow using it
+  // Compare throughly without favoritism
   
 }
