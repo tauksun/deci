@@ -21,4 +21,4 @@ void initializeLogger() {
     logFunc = logNoop;
 }
 
-void log(const string &s) { logFunc(s); }
+void logger(const string &s) { logFunc(s); }

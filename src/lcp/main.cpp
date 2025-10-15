@@ -2,8 +2,8 @@
 #include "server.hpp"
 int main() {
   initializeLogger();
-  log("Starting lcp");
-  log("Intializing listening server");
+  logger("Starting lcp");
+  logger("Intializing listening server");
   server("/tmp/lcp.sock");
   //
 }

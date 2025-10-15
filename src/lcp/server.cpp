@@ -1,4 +1,4 @@
-#include "../common/logger.hpp";
+#include "../common/logger.hpp"
 #include "../common/makeSocketNonBlocking.hpp"
 #include "config.hpp"
 #include <cstdio>
@@ -9,11 +9,11 @@
 #include <unistd.h>
 
 void server(const char *sock) {
-  log("Unlinking sock");
+  logger("Unlinking sock");
   unlink(sock);
 
   // Create
-  log("Creating socket");
+  logger("Creating socket");
   int socketFd = socket(AF_UNIX, SOCK_STREAM, 0);
   if (socketFd == -1) {
     perror("Error while creating socket");
@@ -24,7 +24,7 @@ void server(const char *sock) {
   struct sockaddr_un listener;
   listener.sun_family = AF_UNIX;
   strcpy(listener.sun_path, sock);
-  log("Binding socket");
+  logger("Binding socket");
   int bindResult =
       bind(socketFd, (struct sockaddr *)&listener, sizeof(listener));
   if (bindResult != 0) {
@@ -32,7 +32,7 @@ void server(const char *sock) {
     exit(EXIT_FAILURE);
   }
 
-  log("Making socket re-usable");
+  logger("Making socket re-usable");
   if (setsockopt(socketFd, SOL_SOCKET, SO_REUSEADDR, &configLCP::SOCKET_REUSE,
                  sizeof(configLCP::SOCKET_REUSE)) < 0) {
     perror("setsockopt(SO_REUSEADDR) failed");
@@ -40,7 +40,7 @@ void server(const char *sock) {
   }
 
   // Listen
-  log("Starting listening");
+  logger("Starting listening");
   int listenResult = listen(socketFd, configLCP::MAXCONNECTIONS);
   if (listenResult != 0) {
     perror("Error while listening on socket");
@@ -56,16 +56,10 @@ void server(const char *sock) {
   // -> Add them -> Loop through the queue -> Process each client socket 
   // i.e., read 1023 bytes & if more data is present -> Add to the queue
   // Once the queue is processed -> Re-check epoll_wait & repeat.
-  
-  // TODO: 
-  // Ensure the edge cases & processing time complexity & if this can lead to starvation of any kind 
-  // Learn about level triggered & how does it compare to Edge triggered & what will be the flow using it
-  // Compare throughly without favoritism
-  
 
   struct epoll_event ev, events[configLCP::MAXCONNECTIONS];
 
-  log("Making server socket non-blocking");
+  logger("Making server socket non-blocking");
   if (makeSocketNonBlocking(socketFd)) {
     perror("fcntl socketFd");
     exit(EXIT_FAILURE);
@@ -97,15 +91,15 @@ void server(const char *sock) {
 
     for (int n = 0; n < readyFds; ++n) {
       if (events[n].data.fd == socketFd) {
-        log("Accepting client connection");
+        logger("Accepting client connection");
         int connSock = accept(socketFd, NULL, NULL);
         if (connSock == -1) {
           perror("connSock accept");
           continue;
         }
 
-        log("Connection accepted");
-        log("Making connection non-blocking");
+        logger("Connection accepted");
+        logger("Making connection non-blocking");
         if (makeSocketNonBlocking(connSock)) {
           perror("fcntl socketFd");
           close(connSock);
@@ -115,7 +109,7 @@ void server(const char *sock) {
         ev.events = EPOLLIN | EPOLLET;
         ev.data.fd = connSock;
 
-        log("Adding connection for monitoring by epoll");
+        logger("Adding connection for monitoring by epoll");
         if (epoll_ctl(epollFd, EPOLL_CTL_ADD, connSock, &ev) == -1) {
           perror("epoll_ctl: connSock");
           close(connSock);

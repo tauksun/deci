@@ -4,6 +4,6 @@
 #include <string>
 
 void initializeLogger();
-void log(const std::string &s);
+void logger(const std::string &s);
 
 #endif
