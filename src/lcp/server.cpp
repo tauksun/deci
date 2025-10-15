@@ -1,14 +1,19 @@
+#include "../common/logger.hpp";
+#include "../common/makeSocketNonBlocking.hpp"
 #include "config.hpp"
 #include <cstdio>
 #include <cstdlib>
+#include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
 
-void server(char *sock) {
+void server(const char *sock) {
+  log("Unlinking sock");
   unlink(sock);
 
   // Create
+  log("Creating socket");
   int socketFd = socket(AF_UNIX, SOCK_STREAM, 0);
   if (socketFd == -1) {
     perror("Error while creating socket");
@@ -19,6 +24,7 @@ void server(char *sock) {
   struct sockaddr_un listener;
   listener.sun_family = AF_UNIX;
   strcpy(listener.sun_path, sock);
+  log("Binding socket");
   int bindResult =
       bind(socketFd, (struct sockaddr *)&listener, sizeof(listener));
   if (bindResult != 0) {
@@ -26,6 +32,7 @@ void server(char *sock) {
     exit(EXIT_FAILURE);
   }
 
+  log("Making socket re-usable");
   if (setsockopt(socketFd, SOL_SOCKET, SO_REUSEADDR, &configLCP::SOCKET_REUSE,
                  sizeof(configLCP::SOCKET_REUSE)) < 0) {
     perror("setsockopt(SO_REUSEADDR) failed");
@@ -33,6 +40,7 @@ void server(char *sock) {
   }
 
   // Listen
+  log("Starting listening");
   int listenResult = listen(socketFd, configLCP::MAXCONNECTIONS);
   if (listenResult != 0) {
     perror("Error while listening on socket");
@@ -54,4 +62,67 @@ void server(char *sock) {
   // Learn about level triggered & how does it compare to Edge triggered & what will be the flow using it
   // Compare throughly without favoritism
   
+
+  struct epoll_event ev, events[configLCP::MAXCONNECTIONS];
+
+  log("Making server socket non-blocking");
+  if (makeSocketNonBlocking(socketFd)) {
+    perror("fcntl socketFd");
+    exit(EXIT_FAILURE);
+  }
+
+  int epollFd = epoll_create1(0);
+  if (epollFd == -1) {
+    perror("epoll create error");
+    exit(EXIT_FAILURE);
+  }
+
+  // Configure Edge triggered
+  ev.events = EPOLLIN | EPOLLET;
+  ev.data.fd = socketFd;
+
+  // Add socket descriptor for monitoring
+  if (epoll_ctl(epollFd, EPOLL_CTL_ADD, socketFd, &ev) == -1) {
+    perror("epoll_ctl socketFd");
+    exit(EXIT_FAILURE);
+  }
+
+  while (1) {
+    // Wait time is infinite
+    int readyFds = epoll_wait(epollFd, events, configLCP::MAXCONNECTIONS, -1);
+    if (readyFds == -1) {
+      perror("epoll_wait error");
+      exit(EXIT_FAILURE);
+    }
+
+    for (int n = 0; n < readyFds; ++n) {
+      if (events[n].data.fd == socketFd) {
+        log("Accepting client connection");
+        int connSock = accept(socketFd, NULL, NULL);
+        if (connSock == -1) {
+          perror("connSock accept");
+          continue;
+        }
+
+        log("Connection accepted");
+        log("Making connection non-blocking");
+        if (makeSocketNonBlocking(connSock)) {
+          perror("fcntl socketFd");
+          close(connSock);
+          continue;
+        }
+
+        ev.events = EPOLLIN | EPOLLET;
+        ev.data.fd = connSock;
+
+        log("Adding connection for monitoring by epoll");
+        if (epoll_ctl(epollFd, EPOLL_CTL_ADD, connSock, &ev) == -1) {
+          perror("epoll_ctl: connSock");
+          close(connSock);
+        }
+      } else {
+        // Handle connection
+      }
+    }
+  }
 }

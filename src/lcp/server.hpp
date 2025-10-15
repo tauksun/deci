@@ -1,4 +1,4 @@
 #ifndef LCP_SERVER
 #define LCP_SERVER
-void server();
+void server(const char *);
 #endif
