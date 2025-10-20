@@ -8,5 +8,5 @@ int main() {
   logger("Starting lcp");
 
   logger("Intializing listening server");
-  std::thread serverThread(server, (const char *)configLCP::sock);
+  std::thread serverThread(server, configLCP::sock);
 }
