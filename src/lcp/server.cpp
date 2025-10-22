@@ -188,14 +188,15 @@ void server(const char *sock) {
   int timeout = 0;
   std::deque<ReadSocketMessage> readSocketQueue;
   std::deque<Operation> operationQueue;
+  std::deque<WriteSocketMessage> writeSocketQueue;
 
   while (1) {
 
     /**
      * epoll_wait
-     * readSocketQueue
-     * operationQueue
-     * writeSocketQueue
+     * Read from socket queue
+     * perform operation on parsed messages
+     * write response using socket queue
      *
      * */
 
