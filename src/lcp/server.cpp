@@ -64,7 +64,8 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
 }
 
 void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
-                         std::deque<Operation> &operationQueue) {
+                         std::deque<Operation> &operationQueue,
+                         std::deque<WriteSocketMessage> &writeSocketQueue) {
   // Read few bytes
   // If socket still has data, re-queue
 
@@ -99,14 +100,26 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
       ParsedMessage parsed = msgParser(msg.data);
       if (parsed.error.partial) {
         // If message is parsed partially, re-queue in readSocketQueue
+        logger("Partially parsed, re-queuing");
         readSocketQueue.push_back(msg);
       } else if (parsed.error.invalid) {
-        // TODO: Write Error to socket queue
+        logger("Invalid message : ", msg.data);
+        WriteSocketMessage errorMessage;
+        errorMessage.fd = msg.fd;
+        errorMessage.response = configLCP::INVALID_MESSAGE;
+        writeSocketQueue.push_back(errorMessage);
       } else {
-        Operation op;
-        op.fd = msg.fd;
-        op.msg = parsed;
-        operationQueue.push_back(op);
+        logger("Successfully parsed, adding to operationQueue");
+        if (parsed.operation == "GGET" || parsed.operation == "GSET" ||
+            parsed.operation == "GDEL" || parsed.operation == "GEXISTS") {
+          // Send to another thread via eventfd & concurrent queue >
+          // Handle the Global cache lifecyle in that thread
+        } else {
+          Operation op;
+          op.fd = msg.fd;
+          op.msg = parsed;
+          operationQueue.push_back(op);
+        }
       }
     }
 
@@ -117,7 +130,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
 
 void performOperation(std::deque<ReadSocketMessage> &readSocketQueue,
                       std::deque<Operation> &operationQueue,
-                      std::deque<WriteSocketMessage> &writeToSocketQueue) {
+                      std::deque<WriteSocketMessage> &writeSocketQueue) {
 
   long pos = 0;
   long currentSize = operationQueue.size();
@@ -126,20 +139,53 @@ void performOperation(std::deque<ReadSocketMessage> &readSocketQueue,
     // Perform operation
     // If the key is locked, re-queue
 
+    WriteSocketMessage response;
     logger("Performing operation");
     Operation op = operationQueue.front();
+    logger("Op : ", op.msg.operation);
+
+    if (op.msg.operation == "SET") {
+      cache[op.msg.key] = op.msg.value;
+      response.response = ":1\r\n"; // TODO: as per protocol using a function
+      // If sync flag is set, queue in sync queue & use eventfd to wake up
+      // another thread
+      if (op.msg.flag.sync) {
+
+    } else if (op.msg.operation == "GET") {
+      logger("Key : ", op.msg.key);
+      auto val = cache.find(op.msg.key);
+      if (val != cache.end()) {
+      } else {
+      }
+    } else if (op.msg.operation == "DEL") {
+      logger("Key : ", op.msg.key);
+      cache.erase(op.msg.key);
+    } else if (op.msg.operation == "EXISTS") {
+      logger("Key : ", op.msg.key);
+      auto val = cache.find(op.msg.key);
+      if (val != cache.end()) {
+      } else {
+      }
+    }
+
+    // Send Response
+    response.fd = op.fd;
+    writeSocketQueue.push_back(response);
+
     operationQueue.pop_front();
     pos++;
   }
-void writeToSocketQueue(std::deque<WriteSocketMessage> &writeToSocketQueue) {
+}
+
+void writeToSocketQueue(std::deque<WriteSocketMessage> &writeSocketQueue) {
   // Write few bytes & keep writing till whole content is written
 
   long pos = 0;
-  long currentSize = writeToSocketQueue.size();
+  long currentSize = writeSocketQueue.size();
 
   while (pos < currentSize) {
-    WriteSocketMessage response = writeToSocketQueue.front();
-    writeToSocketQueue.pop_front();
+    WriteSocketMessage response = writeSocketQueue.front();
+    writeSocketQueue.pop_front();
     pos++;
   }
 }
@@ -224,7 +270,7 @@ void server(const char *sock) {
      * */
 
     epollIO(epollFd, socketFd, ev, events, timeout, readSocketQueue);
-    readFromSocketQueue(readSocketQueue, operationQueue);
+    readFromSocketQueue(readSocketQueue, operationQueue, writeSocketQueue);
     performOperation(readSocketQueue, operationQueue, writeSocketQueue);
     writeToSocketQueue(writeSocketQueue);
 
