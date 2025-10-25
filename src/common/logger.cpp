@@ -1,18 +1,11 @@
+#include "logger.hpp"
 #include "config.hpp"
-#include <functional>
 #include <iostream>
-#include <string>
 
-using namespace std;
+void logImpl(const std::string &s) { std::cout << s << std::endl; }
+void logNoop(const std::string &) { /* do nothing */ }
 
-void logImpl(const string &s) { cout << s << endl; }
-
-void logNoop(const string &) {
-  // do nothing
-}
-
-// Function pointer
-function<void(const string &)> logFunc;
+std::function<void(const std::string &)> logFunc;
 
 void initializeLogger() {
   if (configCommon::logger)
@@ -20,5 +13,3 @@ void initializeLogger() {
   else
     logFunc = logNoop;
 }
-
-void logger(const string &s) { logFunc(s); }

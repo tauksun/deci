@@ -1,5 +1,7 @@
+#include "server.hpp"
 #include "../common/logger.hpp"
 #include "../common/makeSocketNonBlocking.hpp"
+#include "../common/messageParser.hpp"
 #include "config.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -8,25 +10,9 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <unordered_map>
 
-struct ReadSocketMessage {
-  int fd;
-  int readBytes = 0;
-  std::string data = "";
-};
-
-struct Operation {
-  int fd;
-  std::string op = "";
-};
-
-struct WriteSocketMessage {
-  int fd;
-  int writtenBytes = 0;
-  std::string response = "";
-};
-
-std::string msgParser(std::string msg) { return msg; }
+unordered_map<string, string> cache;
 
 void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
              struct epoll_event *events, int timeout,
@@ -49,8 +35,8 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
         continue;
       }
 
-      logger("Connection accepted");
-      logger("Making connection non-blocking");
+      logger("Connection accepted : ", connSock);
+      logger("Making connection non-blocking : ", connSock);
       if (makeSocketNonBlocking(connSock)) {
         perror("fcntl socketFd");
         close(connSock);
@@ -60,14 +46,14 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
       ev.events = EPOLLIN | EPOLLET;
       ev.data.fd = connSock;
 
-      logger("Adding connection for monitoring by epoll");
+      logger("Adding connection : ", connSock, " for monitoring by epoll");
       if (epoll_ctl(epollFd, EPOLL_CTL_ADD, connSock, &ev) == -1) {
         perror("epoll_ctl: connSock");
         close(connSock);
       }
     } else {
       // Add to readSocketQueue
-      logger("Adding to readSocketQueue");
+      logger("Adding to readSocketQueue : ", events[n].data.fd);
       ReadSocketMessage sock;
       sock.fd = events[n].data.fd;
       sock.data = "";
@@ -110,10 +96,18 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
       readSocketQueue.push_back(msg);
     } else {
       // Parse the message here & push to operationQueue
-      Operation op;
-      op.fd = msg.fd;
-      op.op = msgParser(msg.data);
-      operationQueue.push_back(op);
+      ParsedMessage parsed = msgParser(msg.data);
+      if (parsed.error.partial) {
+        // If message is parsed partially, re-queue in readSocketQueue
+        readSocketQueue.push_back(msg);
+      } else if (parsed.error.invalid) {
+        // TODO: Write Error to socket queue
+      } else {
+        Operation op;
+        op.fd = msg.fd;
+        op.msg = parsed;
+        operationQueue.push_back(op);
+      }
     }
 
     readSocketQueue.pop_front();
@@ -121,8 +115,37 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
   }
 }
 
+void performOperation(std::deque<ReadSocketMessage> &readSocketQueue,
+                      std::deque<Operation> &operationQueue,
+                      std::deque<WriteSocketMessage> &writeToSocketQueue) {
+
+  long pos = 0;
+  long currentSize = operationQueue.size();
+
+  while (pos < currentSize) {
+    // Perform operation
+    // If the key is locked, re-queue
+
+    logger("Performing operation");
+    Operation op = operationQueue.front();
+    operationQueue.pop_front();
+    pos++;
+  }
+void writeToSocketQueue(std::deque<WriteSocketMessage> &writeToSocketQueue) {
+  // Write few bytes & keep writing till whole content is written
+
+  long pos = 0;
+  long currentSize = writeToSocketQueue.size();
+
+  while (pos < currentSize) {
+    WriteSocketMessage response = writeToSocketQueue.front();
+    writeToSocketQueue.pop_front();
+    pos++;
+  }
+}
+
 void server(const char *sock) {
-  logger("Unlinking sock");
+  logger("Unlinking sock : ", sock);
   unlink(sock);
 
   // Create
@@ -137,7 +160,7 @@ void server(const char *sock) {
   struct sockaddr_un listener;
   listener.sun_family = AF_UNIX;
   strcpy(listener.sun_path, sock);
-  logger("Binding socket");
+  logger("Binding socket : ", socketFd);
   int bindResult =
       bind(socketFd, (struct sockaddr *)&listener, sizeof(listener));
   if (bindResult != 0) {
@@ -145,7 +168,7 @@ void server(const char *sock) {
     exit(EXIT_FAILURE);
   }
 
-  logger("Making socket re-usable");
+  logger("Making socket re-usable : ", socketFd);
   if (setsockopt(socketFd, SOL_SOCKET, SO_REUSEADDR, &configLCP::SOCKET_REUSE,
                  sizeof(configLCP::SOCKET_REUSE)) < 0) {
     perror("setsockopt(SO_REUSEADDR) failed");
@@ -153,7 +176,7 @@ void server(const char *sock) {
   }
 
   // Listen
-  logger("Starting listening");
+  logger("Starting listening on : ", socketFd);
   int listenResult = listen(socketFd, configLCP::MAXCONNECTIONS);
   if (listenResult != 0) {
     perror("Error while listening on socket");
@@ -163,7 +186,7 @@ void server(const char *sock) {
   // Accept (E-Poll)
   struct epoll_event ev, events[configLCP::MAXCONNECTIONS];
 
-  logger("Making server socket non-blocking");
+  logger("Making server socket non-blocking : ", socketFd);
   if (makeSocketNonBlocking(socketFd)) {
     perror("fcntl socketFd");
     exit(EXIT_FAILURE);
@@ -202,6 +225,18 @@ void server(const char *sock) {
 
     epollIO(epollFd, socketFd, ev, events, timeout, readSocketQueue);
     readFromSocketQueue(readSocketQueue, operationQueue);
+    performOperation(readSocketQueue, operationQueue, writeSocketQueue);
+    writeToSocketQueue(writeSocketQueue);
 
+    // If there are operations in read/write queue > keep timeout to be 0,
+    // else -1(Infinity)
+    if (readSocketQueue.size() || operationQueue.size() ||
+        writeSocketQueue.size()) {
+      timeout = 0;
+    } else {
+      timeout = -1;
+    }
+
+    logger("Waiting for epoll with timeout : ", timeout);
   }
 }
