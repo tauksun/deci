@@ -3,6 +3,7 @@
 #include "../common/makeSocketNonBlocking.hpp"
 #include "../common/messageParser.hpp"
 #include "config.hpp"
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
@@ -63,9 +64,11 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
   }
 }
 
-void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
-                         std::deque<Operation> &operationQueue,
-                         std::deque<WriteSocketMessage> &writeSocketQueue) {
+void readFromSocketQueue(
+    std::deque<ReadSocketMessage> &readSocketQueue,
+    std::deque<Operation> &operationQueue,
+    std::deque<WriteSocketMessage> &writeSocketQueue,
+    moodycamel::ConcurrentQueue<GlobalCacheOpMessage> &GlobalCacheOpsQueue) {
   // Read few bytes
   // If socket still has data, re-queue
 
@@ -112,9 +115,26 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
         logger("Successfully parsed, adding to operationQueue");
         if (parsed.operation == "GGET" || parsed.operation == "GSET" ||
             parsed.operation == "GDEL" || parsed.operation == "GEXISTS") {
-          // Send to another thread via eventfd & concurrent queue >
+          // Send to another thread via eventfd & concurrent queue
           // Handle the Global cache lifecyle in that thread
+          GlobalCacheOpMessage globalCacheMessage;
+          globalCacheMessage.fd = msg.fd;
+          globalCacheMessage.op = msg.data;
+          GlobalCacheOpsQueue.enqueue(globalCacheMessage);
         } else {
+          // If sync flag is set, queue in sync queue & use eventfd to wake up
+          // another thread
+          if (parsed.flag.sync) {
+            GlobalCacheOpMessage syncMessage;
+            syncMessage.fd = msg.fd;
+            // Remove the sync flag from message to prevent recursive
+            // synchronization
+            syncMessage.op = msg.data.substr(
+                0, msg.data.length() - 4); // subtract 4 bytes for :1\r\n
+            logger("syncMessage : ", syncMessage.op);
+            GlobalCacheOpsQueue.enqueue(syncMessage);
+          }
+
           Operation op;
           op.fd = msg.fd;
           op.msg = parsed;
@@ -143,30 +163,7 @@ void performOperation(std::deque<ReadSocketMessage> &readSocketQueue,
     logger("Performing operation");
     Operation op = operationQueue.front();
     logger("Op : ", op.msg.operation);
-
-    if (op.msg.operation == "SET") {
-      cache[op.msg.key] = op.msg.value;
-      response.response = ":1\r\n"; // TODO: as per protocol using a function
-      // If sync flag is set, queue in sync queue & use eventfd to wake up
-      // another thread
-      if (op.msg.flag.sync) {
-
-    } else if (op.msg.operation == "GET") {
-      logger("Key : ", op.msg.key);
-      auto val = cache.find(op.msg.key);
-      if (val != cache.end()) {
-      } else {
-      }
-    } else if (op.msg.operation == "DEL") {
-      logger("Key : ", op.msg.key);
-      cache.erase(op.msg.key);
-    } else if (op.msg.operation == "EXISTS") {
-      logger("Key : ", op.msg.key);
-      auto val = cache.find(op.msg.key);
-      if (val != cache.end()) {
-      } else {
-      }
-    }
+    operate(op, &response);
 
     // Send Response
     response.fd = op.fd;
@@ -190,7 +187,30 @@ void writeToSocketQueue(std::deque<WriteSocketMessage> &writeSocketQueue) {
   }
 }
 
-void server(const char *sock) {
+void readFromSynchronizationQueue(
+    moodycamel::ConcurrentQueue<Operation> &SynchronizationQueue,
+    std::deque<WriteSocketMessage> &writeSocketQueue) {
+  // Operate on n number of messages
+
+  for (int i = 0; i < min(SynchronizationQueue.size_approx(),
+                          configLCP::MAX_SYNC_MESSAGES);
+       i++) {
+    WriteSocketMessage response;
+    Operation msg;
+    bool found = SynchronizationQueue.try_dequeue(msg);
+    if (!found) {
+      break;
+    }
+    operate(msg, &response);
+    response.fd = msg.fd;
+    writeSocketQueue.push_back(response);
+  }
+}
+
+void server(
+    const char *sock,
+    moodycamel::ConcurrentQueue<GlobalCacheOpMessage> &GlobalCacheOpsQueue,
+    moodycamel::ConcurrentQueue<Operation> &SynchronizationQueue) {
   logger("Unlinking sock : ", sock);
   unlink(sock);
 
@@ -270,14 +290,16 @@ void server(const char *sock) {
      * */
 
     epollIO(epollFd, socketFd, ev, events, timeout, readSocketQueue);
-    readFromSocketQueue(readSocketQueue, operationQueue, writeSocketQueue);
+    readFromSocketQueue(readSocketQueue, operationQueue, writeSocketQueue,
+                        GlobalCacheOpsQueue);
     performOperation(readSocketQueue, operationQueue, writeSocketQueue);
+    readFromSynchronizationQueue(SynchronizationQueue, writeSocketQueue);
     writeToSocketQueue(writeSocketQueue);
 
     // If there are operations in read/write queue > keep timeout to be 0,
     // else -1(Infinity)
     if (readSocketQueue.size() || operationQueue.size() ||
-        writeSocketQueue.size()) {
+        writeSocketQueue.size() || SynchronizationQueue.size_approx()) {
       timeout = 0;
     } else {
       timeout = -1;
