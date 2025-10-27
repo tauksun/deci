@@ -8,7 +8,7 @@
 #include <sys/epoll.h>
 #include <unistd.h>
 
-void epollIO(int epollFd, struct epoll_event &ev, struct epoll_event *events,
+void epollIO(int epollFd, struct epoll_event *events,
              std::deque<ReadSocketMessage> &readSocketQueue, int timeout) {
 
   int readyFds =
@@ -121,7 +121,8 @@ void cacheSynchronization(
     ev.events = EPOLLIN | EPOLLET;
     ev.data.fd = connSockFd;
 
-    logger("Adding connection : ", connSockFd, " for monitoring by epoll");
+    logger("cacheSynchronization thread : Adding connection : ", connSockFd,
+           " for monitoring by epoll");
     if (epoll_ctl(epollFd, EPOLL_CTL_ADD, connSockFd, &ev) == -1) {
       perror("cacheSynchronization thread : epoll_ctl: connSockFd");
       close(connSockFd);
@@ -139,7 +140,7 @@ void cacheSynchronization(
      * write to SynchronizationQueue & send trigger using eventfd
      * */
 
-    epollIO(epollFd, ev, events, readSocketQueue, timeout);
+    epollIO(epollFd, events, readSocketQueue, timeout);
     readFromSocketQueue(readSocketQueue, SynchronizationQueue);
     triggerEventfd(synchronizationEventFd);
 

@@ -82,6 +82,7 @@ void readFromSocketQueue(
 
   long pos = 0;
   long currentSize = readSocketQueue.size();
+  bool pushedToGlobalCacheOpsQueue = false;
 
   while (pos < currentSize) {
     char buf[1024];
@@ -129,26 +130,21 @@ void readFromSocketQueue(
           globalCacheMessage.fd = msg.fd;
           globalCacheMessage.op = msg.data;
           GlobalCacheOpsQueue.enqueue(globalCacheMessage);
-
-          uint64_t counter = 1;
-          write(globalCacheThreadEventFd, &counter, sizeof(counter));
-
+          pushedToGlobalCacheOpsQueue = true;
         } else {
-
           // If sync flag is set, queue in sync queue & use eventfd to wake up
           // another thread
           if (parsed.flag.sync) {
             GlobalCacheOpMessage syncMessage;
-            syncMessage.fd = msg.fd;
+            syncMessage.fd = -1; // No file descriptor for sync messages as this
+                                 // is internal operation
             // Remove the sync flag from message to prevent recursive
             // synchronization
             syncMessage.op = msg.data.substr(
                 0, msg.data.length() - 4); // subtract 4 bytes for :1\r\n
             logger("syncMessage : ", syncMessage.op);
             GlobalCacheOpsQueue.enqueue(syncMessage);
-
-            uint64_t counter = 1;
-            write(globalCacheThreadEventFd, &counter, sizeof(counter));
+            pushedToGlobalCacheOpsQueue = true;
           }
 
           Operation op;
@@ -161,6 +157,12 @@ void readFromSocketQueue(
 
     readSocketQueue.pop_front();
     pos++;
+  }
+
+  // Trigger single event for n number of messages pushed
+  if (pushedToGlobalCacheOpsQueue) {
+    uint64_t counter = 1;
+    write(globalCacheThreadEventFd, &counter, sizeof(counter));
   }
 }
 
@@ -198,6 +200,8 @@ void writeToSocketQueue(std::deque<WriteSocketMessage> &writeSocketQueue) {
 
   while (pos < currentSize) {
     WriteSocketMessage response = writeSocketQueue.front();
+    write(response.fd, response.response.c_str(), response.response.length());
+
     writeSocketQueue.pop_front();
     pos++;
   }

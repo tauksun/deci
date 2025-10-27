@@ -5,6 +5,7 @@
 #include "main.hpp"
 
 void globalCacheOps(
-    moodycamel::ConcurrentQueue<GlobalCacheOpMessage> &GlobalCacheOpsQueue);
+    moodycamel::ConcurrentQueue<GlobalCacheOpMessage> &GlobalCacheOpsQueue,
+    int globalCacheThreadEventFd);
 
 #endif

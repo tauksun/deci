@@ -12,7 +12,7 @@ constexpr unsigned long MAX_SYNC_MESSAGES = 100;
 constexpr int MAX_SYNC_CONNECTIONS = 100;
 constexpr const char *GCP_SERVER_IP = "127.0.0.1";
 constexpr int GCP_SERVER_PORT = 7480;
-constexpr int MAX_GCP_CONNECTIONS = 100;
+constexpr unsigned long MAX_GCP_CONNECTIONS = 100;
 
 } // namespace configLCP
 
