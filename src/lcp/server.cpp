@@ -17,7 +17,8 @@ unordered_map<string, string> cache;
 
 void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
              struct epoll_event *events, int timeout,
-             std::deque<ReadSocketMessage> &readSocketQueue) {
+             std::deque<ReadSocketMessage> &readSocketQueue,
+             int synchronizationEventFd) {
 
   int readyFds =
       epoll_wait(epollFd, events, configLCP::MAXCONNECTIONS, timeout);
@@ -52,6 +53,12 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
         perror("epoll_ctl: connSock");
         close(connSock);
       }
+    } else if (events[n].data.fd == synchronizationEventFd) {
+      // Reading 1 Byte from eventFd (resets its counter)
+      logger("Reading from synchronizationEventFd");
+      uint64_t counter;
+      read(synchronizationEventFd, &counter, sizeof(counter));
+      logger("Read synchronizationEventFd counter : ", counter);
     } else {
       // Add to readSocketQueue
       logger("Adding to readSocketQueue : ", events[n].data.fd);
@@ -68,7 +75,8 @@ void readFromSocketQueue(
     std::deque<ReadSocketMessage> &readSocketQueue,
     std::deque<Operation> &operationQueue,
     std::deque<WriteSocketMessage> &writeSocketQueue,
-    moodycamel::ConcurrentQueue<GlobalCacheOpMessage> &GlobalCacheOpsQueue) {
+    moodycamel::ConcurrentQueue<GlobalCacheOpMessage> &GlobalCacheOpsQueue,
+    int globalCacheThreadEventFd) {
   // Read few bytes
   // If socket still has data, re-queue
 
@@ -121,7 +129,12 @@ void readFromSocketQueue(
           globalCacheMessage.fd = msg.fd;
           globalCacheMessage.op = msg.data;
           GlobalCacheOpsQueue.enqueue(globalCacheMessage);
+
+          uint64_t counter = 1;
+          write(globalCacheThreadEventFd, &counter, sizeof(counter));
+
         } else {
+
           // If sync flag is set, queue in sync queue & use eventfd to wake up
           // another thread
           if (parsed.flag.sync) {
@@ -133,6 +146,9 @@ void readFromSocketQueue(
                 0, msg.data.length() - 4); // subtract 4 bytes for :1\r\n
             logger("syncMessage : ", syncMessage.op);
             GlobalCacheOpsQueue.enqueue(syncMessage);
+
+            uint64_t counter = 1;
+            write(globalCacheThreadEventFd, &counter, sizeof(counter));
           }
 
           Operation op;
@@ -192,9 +208,8 @@ void readFromSynchronizationQueue(
     std::deque<WriteSocketMessage> &writeSocketQueue) {
   // Operate on n number of messages
 
-  for (int i = 0; i < min(SynchronizationQueue.size_approx(),
-                          configLCP::MAX_SYNC_MESSAGES);
-       i++) {
+  unsigned long queueSize = SynchronizationQueue.size_approx();
+  for (int i = 0; i < min(queueSize, configLCP::MAX_SYNC_MESSAGES); i++) {
     WriteSocketMessage response;
     Operation msg;
     bool found = SynchronizationQueue.try_dequeue(msg);
@@ -210,7 +225,8 @@ void readFromSynchronizationQueue(
 void server(
     const char *sock,
     moodycamel::ConcurrentQueue<GlobalCacheOpMessage> &GlobalCacheOpsQueue,
-    moodycamel::ConcurrentQueue<Operation> &SynchronizationQueue) {
+    moodycamel::ConcurrentQueue<Operation> &SynchronizationQueue,
+    int globalCacheThreadEventFd, int synchronizationEventFd) {
   logger("Unlinking sock : ", sock);
   unlink(sock);
 
@@ -274,6 +290,16 @@ void server(
     exit(EXIT_FAILURE);
   }
 
+  // Add synchronizationEventFd for monitoring
+  // Read from it after receiving event to reset the Kernel counter
+  ev.events = EPOLLIN | EPOLLET;
+  ev.data.fd = synchronizationEventFd;
+
+  if (epoll_ctl(epollFd, EPOLL_CTL_ADD, synchronizationEventFd, &ev) == -1) {
+    perror("epoll_ctl synchronizationEventFd");
+    exit(EXIT_FAILURE);
+  }
+
   int timeout = 0;
   std::deque<ReadSocketMessage> readSocketQueue;
   std::deque<Operation> operationQueue;
@@ -289,9 +315,10 @@ void server(
      *
      * */
 
-    epollIO(epollFd, socketFd, ev, events, timeout, readSocketQueue);
+    epollIO(epollFd, socketFd, ev, events, timeout, readSocketQueue,
+            synchronizationEventFd);
     readFromSocketQueue(readSocketQueue, operationQueue, writeSocketQueue,
-                        GlobalCacheOpsQueue);
+                        GlobalCacheOpsQueue, globalCacheThreadEventFd);
     performOperation(readSocketQueue, operationQueue, writeSocketQueue);
     readFromSynchronizationQueue(SynchronizationQueue, writeSocketQueue);
     writeToSocketQueue(writeSocketQueue);

@@ -27,6 +27,7 @@ struct WriteSocketMessage {
 void server(
     const char *,
     moodycamel::ConcurrentQueue<GlobalCacheOpMessage> &GlobalCacheOpsQueue,
-    moodycamel::ConcurrentQueue<Operation> &SynchronizationQueue);
+    moodycamel::ConcurrentQueue<Operation> &SynchronizationQueue,
+    int globalCacheThreadEventFd, int synchronizationEventFd);
 
 #endif

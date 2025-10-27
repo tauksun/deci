@@ -7,6 +7,7 @@ using namespace std;
 struct Flag {
   bool sync = false;
 };
+
 struct ParseError {
   bool partial = false;
   bool invalid = false;

@@ -7,6 +7,7 @@
 #include "server.hpp"
 #include "synchronizationOps.hpp"
 #include <functional>
+#include <sys/eventfd.h>
 #include <thread>
 
 int main() {
@@ -15,6 +16,10 @@ int main() {
 
   logger("Intializing listening server");
 
+  // Event fds for triggering peer threads
+  int globalCacheThreadEventFd = eventfd(0, EFD_NONBLOCK);
+  int synchronizationEventFd = eventfd(0, EFD_NONBLOCK);
+
   // Concurrent queues
   moodycamel::ConcurrentQueue<GlobalCacheOpMessage> GlobalCacheOpsQueue;
   moodycamel::ConcurrentQueue<Operation> SynchronizationQueue;
@@ -22,9 +27,11 @@ int main() {
   std::thread serverThread(server, configLCP::sock, ref(GlobalCacheOpsQueue),
                            ref(SynchronizationQueue));
   std::thread healthThread(health);
-  std::thread GlobalCacheOpsThread(globalCacheOps, ref(GlobalCacheOpsQueue));
-  std::thread SynchronizationThread(cacheSynchronization,
-                                    ref(SynchronizationQueue));
+  std::thread GlobalCacheOpsThread(globalCacheOps, ref(GlobalCacheOpsQueue),
+                                   globalCacheThreadEventFd);
+  std::thread SynchronizationThread(
+      cacheSynchronization, ref(SynchronizationQueue), synchronizationEventFd);
+
   serverThread.join();
   healthThread.join();
   GlobalCacheOpsThread.join();

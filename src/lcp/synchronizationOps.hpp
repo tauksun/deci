@@ -5,6 +5,7 @@
 #include "server.hpp"
 
 void cacheSynchronization(
-    moodycamel::ConcurrentQueue<Operation> &SynchronizationQueue);
+    moodycamel::ConcurrentQueue<Operation> &SynchronizationQueue,
+    int synchronizationEventFd);
 
 #endif
