@@ -3,7 +3,7 @@
 
 #include "../common/messageParser.hpp"
 #include "../deps/concurrentQueue.hpp"
-#include "main.hpp"
+#include "lcp.hpp"
 #include <string>
 using namespace std;
 

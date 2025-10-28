@@ -1,4 +1,4 @@
-#include "main.hpp"
+#include "lcp.hpp"
 #include "../common/logger.hpp"
 #include "../deps/concurrentQueue.hpp"
 #include "config.hpp"
@@ -32,8 +32,14 @@ int main() {
   std::thread SynchronizationThread(
       cacheSynchronization, ref(SynchronizationQueue), synchronizationEventFd);
 
+  // TODO: Learn more about this & the best practices around it
   serverThread.join();
   healthThread.join();
   GlobalCacheOpsThread.join();
   SynchronizationThread.join();
+
+  // Ques :
+  // Can you prevent the stale data by creating a flag, that when is true
+  // returns the response only after the data ( key:value pair ) is synchronized
+  // with all cache instances.
 }

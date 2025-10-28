@@ -2,7 +2,7 @@
 #define LCP_GLOBAL_CACHE_OPS
 
 #include "../deps/concurrentQueue.hpp"
-#include "main.hpp"
+#include "lcp.hpp"
 
 void globalCacheOps(
     moodycamel::ConcurrentQueue<GlobalCacheOpMessage> &GlobalCacheOpsQueue,
