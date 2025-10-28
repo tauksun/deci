@@ -1,0 +1,25 @@
+#ifndef COMMON
+#define COMMON
+
+#include "messageParser.hpp"
+#include <string>
+using namespace std;
+
+struct ReadSocketMessage {
+  int fd;
+  int readBytes = 0;
+  string data = "";
+};
+
+struct Operation {
+  int fd;
+  ParsedMessage msg;
+};
+
+struct WriteSocketMessage {
+  int fd;
+  int writtenBytes = 0;
+  string response = "";
+};
+
+#endif

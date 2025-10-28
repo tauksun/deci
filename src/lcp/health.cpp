@@ -14,7 +14,7 @@ void health() {
 
   // Make fd non-blocking
   if (makeSocketNonBlocking(connSockFd)) {
-    perror("healeth thread : fcntl connSockFd");
+    perror("health thread : fcntl connSockFd");
   }
 
   auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(

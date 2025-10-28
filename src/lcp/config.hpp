@@ -2,6 +2,7 @@
 #define LCP_CONSTANTS
 
 namespace configLCP {
+constexpr const char *group = "maker";
 constexpr int MAXCONNECTIONS = 100;
 constexpr int SOCKET_REUSE = 1;
 constexpr const char *sock = "/tmp/lcp.sock";

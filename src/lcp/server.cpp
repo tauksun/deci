@@ -2,6 +2,7 @@
 #include "../common/logger.hpp"
 #include "../common/makeSocketNonBlocking.hpp"
 #include "../common/messageParser.hpp"
+#include "../common/operate.hpp"
 #include "config.hpp"
 #include <algorithm>
 #include <cstdio>
@@ -181,7 +182,7 @@ void performOperation(std::deque<ReadSocketMessage> &readSocketQueue,
     logger("Performing operation");
     Operation op = operationQueue.front();
     logger("Op : ", op.msg.operation);
-    operate(op, &response);
+    operate(op, &response, cache);
 
     // Send Response
     response.fd = op.fd;
@@ -220,7 +221,7 @@ void readFromSynchronizationQueue(
     if (!found) {
       break;
     }
-    operate(msg, &response);
+    operate(msg, &response, cache);
     response.fd = msg.fd;
     writeSocketQueue.push_back(response);
   }
