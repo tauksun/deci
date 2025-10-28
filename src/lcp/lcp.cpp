@@ -25,7 +25,8 @@ int main() {
   moodycamel::ConcurrentQueue<Operation> SynchronizationQueue;
 
   std::thread serverThread(server, configLCP::sock, ref(GlobalCacheOpsQueue),
-                           ref(SynchronizationQueue));
+                           ref(SynchronizationQueue), globalCacheThreadEventFd,
+                           synchronizationEventFd);
   std::thread healthThread(health);
   std::thread GlobalCacheOpsThread(globalCacheOps, ref(GlobalCacheOpsQueue),
                                    globalCacheThreadEventFd);
