@@ -8,7 +8,7 @@ struct GroupConcurrentSyncQueueMessage {
   int fd;
   std::string lcp;
   std::string query;
-  bool connectionRegistration;
+  bool connectionRegistration = false;
 };
 
 struct GroupQueueEventFd {

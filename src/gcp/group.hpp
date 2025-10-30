@@ -3,8 +3,10 @@
 
 #include "../deps/concurrentQueue.hpp"
 #include "gcp.hpp"
+#include <string>
 
-void group(int epollFd,
-           moodycamel::ConcurrentQueue<GroupConcurrentSyncQueueMessage> &queue);
+int group(int eventFd,
+          moodycamel::ConcurrentQueue<GroupConcurrentSyncQueueMessage> &queue,
+          std::string &groupName);
 
 #endif
