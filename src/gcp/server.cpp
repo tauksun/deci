@@ -74,12 +74,17 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
 
 void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
                          std::deque<Operation> &operationQueue,
-                         std::deque<WriteSocketMessage> &writeSocketQueue) {
+                         std::deque<WriteSocketMessage> &writeSocketQueue,
+                         unordered_map<std::string, GroupQueueEventFd> &groups,
+                         unordered_map<int, FdGroupLCP> &fdGroupLCPMap) {
   // Read few bytes
   // If socket still has data, re-queue
 
   long pos = 0;
   long currentSize = readSocketQueue.size();
+
+  // Group's eventFd map for which message is pushed to concurrent queue
+  unordered_map<string, int> groupEventFds;
 
   while (pos < currentSize) {
     char buf[1024];
@@ -110,10 +115,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
       if (parsed.error.partial) {
         // If message is parsed partially, re-queue in readSocketQueue
         logger("Partially parsed, re-queuing");
-        readSocketQueue.push_back(
-            msg); // TODO: Possible OOM, if the client connects send some data &
-                  // never completes the query, then this logic will requeue
-                  // this message on each iteration
+        readSocketQueue.push_back(msg);
       } else if (parsed.error.invalid) {
         logger("Invalid message : ", msg.data);
         WriteSocketMessage errorMessage;
@@ -123,7 +125,35 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
       } else {
         logger("Successfully parsed, adding to operationQueue");
         if (isSyncMessage(parsed.operation)) {
-          // Sync operation > push in cache group concurrent queue
+          // Sync operation > push in group's concurrent queue
+          auto val = fdGroupLCPMap.find(msg.fd);
+          if (val == fdGroupLCPMap.end()) {
+            logger("Invalid msg.fd : ", msg.fd);
+            close(msg.fd);
+            continue;
+          }
+
+          FdGroupLCP sock = val->second;
+
+          logger("Extracting socket group concurrent queue & eventFd");
+          auto sockGroupData = groups.find(sock.group);
+          if (sockGroupData == groups.end()) {
+            logger("Couldn't find socket group data, socket : ", msg.fd,
+                   " group : ", sock.group);
+            close(msg.fd);
+            continue;
+          }
+
+          GroupConcurrentSyncQueueMessage queueMsg;
+          queueMsg.fd = msg.fd;
+          queueMsg.lcp = sock.lcp;
+          queueMsg.query = msg.data;
+
+          logger("Pushing message to concurrent queue for group : ",
+                 sock.group);
+
+          sockGroupData->second.queue.enqueue(queueMsg);
+          groupEventFds[sock.group] = sockGroupData->second.eventFd;
         } else if (parsed.operation == "GREGISTRATION_LCP") {
         } else if (parsed.operation == "GREGISTRATION_CONNECTION") {
         } else {
@@ -139,6 +169,15 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
 
     readSocketQueue.pop_front();
     pos++;
+  }
+
+  logger("Triggering group eventFds");
+  for (const auto &pair : groupEventFds) {
+    logger("Triggering eventFd for group : ", pair.first,
+           " eventFd : ", pair.second);
+
+    uint64_t counter = 1;
+    write(pair.second, &counter, sizeof(counter));
   }
 }
 
@@ -250,7 +289,7 @@ void server(std::unordered_map<std::string, GroupQueueEventFd> &groups) {
   std::deque<ReadSocketMessage> readSocketQueue;
   std::deque<Operation> operationQueue;
   std::deque<WriteSocketMessage> writeSocketQueue;
-  unordered_map<string, FdGroupLCP> FdGroupLCPMap;
+  unordered_map<int, FdGroupLCP> FdGroupLCPMap;
 
   while (1) {
 
@@ -263,7 +302,8 @@ void server(std::unordered_map<std::string, GroupQueueEventFd> &groups) {
      * */
 
     epollIO(epollFd, socketFd, ev, events, timeout, readSocketQueue);
-    readFromSocketQueue(readSocketQueue, operationQueue, writeSocketQueue);
+    readFromSocketQueue(readSocketQueue, operationQueue, writeSocketQueue,
+                        groups, FdGroupLCPMap);
     performOperation(readSocketQueue, operationQueue, writeSocketQueue);
     writeToSocketQueue(writeSocketQueue);
 
