@@ -1,6 +1,19 @@
 #ifndef GCP
 #define GCP
 
-int main();
+#include "../deps/concurrentQueue.hpp"
+#include <string>
+
+struct GroupConcurrentSyncQueueMessage {
+  int fd;
+  std::string lcp;
+  std::string query;
+  bool connectionRegistration;
+};
+
+struct GroupQueueEventFd {
+  moodycamel::ConcurrentQueue<GroupConcurrentSyncQueueMessage> &queue;
+  int eventFd;
+};
 
 #endif
