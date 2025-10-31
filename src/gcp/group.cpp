@@ -147,6 +147,8 @@ void readFromGroupConcurrentSyncQueue(
       if (epoll_ctl(epollFd, EPOLL_CTL_ADD, msg.fd, &ev) == -1) {
         perror("epoll_ctl ");
         logger("Failed to add for monitoring, fd : ", msg.fd);
+        fdLCPMap.erase(msg.fd);
+        lcpQueueMap[msg.lcp].pop_back();
         continue;
       }
       logger("Added for monitoring by epoll, fd : ", msg.fd);
@@ -154,7 +156,7 @@ void readFromGroupConcurrentSyncQueue(
       // Respond back to Producer LCP socket
       WriteSocketMessage response;
       response.fd = msg.fd;
-      response.response =
+      response.response = ":1\r\n";
 
       writeSocketQueue.push_back(response);
     } else {
@@ -187,7 +189,7 @@ void readFromGroupConcurrentSyncQueue(
       // Respond back to Producer LCP socket
       WriteSocketMessage response;
       response.fd = msg.fd;
-      response.response =
+      response.response = ":1\r\n";
       writeSocketQueue.push_back(response);
     }
   }
