@@ -10,11 +10,11 @@ constexpr int MAX_READ_BYTES = 1023;
 constexpr int MAX_WRITE_BYTES = 1023;
 constexpr int healthUpdateTime = 3; // Seconds
 constexpr unsigned long MAX_SYNC_MESSAGES = 100;
-constexpr int MAX_SYNC_CONNECTIONS = 100;
+constexpr int MAX_SYNC_CONNECTIONS = 1000; // Receiving sync operations from GCP
 constexpr const char *GCP_SERVER_IP = "127.0.0.1";
 constexpr int GCP_SERVER_PORT = 7480;
-constexpr unsigned long MAX_GCP_CONNECTIONS = 100;
-
+constexpr unsigned long MAX_GCP_CONNECTIONS =
+    100; // Sending Global cache queries & sync operations
 } // namespace configLCP
 
 #endif

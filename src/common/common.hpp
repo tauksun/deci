@@ -22,4 +22,10 @@ struct WriteSocketMessage {
   string response = "";
 };
 
+struct WriteSocketSyncMessage {
+  int fd;
+  int writtenBytes = 0;
+  string query = "";
+};
+
 #endif
