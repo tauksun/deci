@@ -1,7 +1,7 @@
 #include "server.hpp"
+#include "../common/decoder.hpp"
 #include "../common/logger.hpp"
 #include "../common/makeSocketNonBlocking.hpp"
-#include "../common/messageParser.hpp"
 #include "../common/operate.hpp"
 #include "config.hpp"
 #include <cstdio>
@@ -111,7 +111,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
       readSocketQueue.push_back(msg);
     } else {
       // Parse the message here & push to operationQueue
-      ParsedMessage parsed = msgParser(msg.data);
+      DecodedMessage parsed = decoder(msg.data);
       if (parsed.error.partial) {
         // If message is parsed partially, re-queue in readSocketQueue
         logger("Partially parsed, re-queuing");

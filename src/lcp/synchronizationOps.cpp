@@ -3,7 +3,6 @@
 #include "../common/makeSocketNonBlocking.hpp"
 #include "config.hpp"
 #include "connect.hpp"
-#include "server.hpp"
 #include <deque>
 #include <sys/epoll.h>
 #include <unistd.h>
@@ -65,7 +64,7 @@ void readFromSocketQueue(
       readSocketQueue.push_back(msg);
     } else {
       // Parse the message here & push to SynchronizationQueue
-      ParsedMessage parsed = msgParser(msg.data);
+      DecodedMessage parsed = decoder(msg.data);
       if (parsed.error.partial) {
         // If message is parsed partially, re-queue in readSocketQueue
         logger("Partially parsed, re-queuing");

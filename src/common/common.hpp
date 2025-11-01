@@ -1,7 +1,7 @@
 #ifndef COMMON
 #define COMMON
 
-#include "messageParser.hpp"
+#include "decoder.hpp"
 #include <string>
 using namespace std;
 
@@ -13,7 +13,7 @@ struct ReadSocketMessage {
 
 struct Operation {
   int fd;
-  ParsedMessage msg;
+  DecodedMessage msg;
 };
 
 struct WriteSocketMessage {
