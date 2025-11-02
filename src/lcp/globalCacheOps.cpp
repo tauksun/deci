@@ -1,10 +1,10 @@
 #include "globalCacheOps.hpp"
+#include "../common/common.hpp"
 #include "../common/logger.hpp"
 #include "../common/makeSocketNonBlocking.hpp"
 #include "../common/responseDecoder.hpp"
 #include "config.hpp"
 #include "connect.hpp"
-#include "server.hpp"
 #include <deque>
 #include <sys/epoll.h>
 #include <unistd.h>

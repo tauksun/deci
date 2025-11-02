@@ -1,5 +1,6 @@
 #include "group.hpp"
 #include "../common/common.hpp"
+#include "../common/decoder.hpp"
 #include "../common/logger.hpp"
 #include "config.hpp"
 #include <deque>

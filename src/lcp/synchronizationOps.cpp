@@ -1,4 +1,5 @@
 #include "synchronizationOps.hpp"
+#include "../common/decoder.hpp"
 #include "../common/logger.hpp"
 #include "../common/makeSocketNonBlocking.hpp"
 #include "config.hpp"
