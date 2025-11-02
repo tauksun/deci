@@ -10,7 +10,7 @@ string encoder(string *str, string type) {
     int len = (*str).length();
     msg = "$" + to_string(len) + delimiter + *str + delimiter;
   } else if (type == "error") {
-    msg = "-" + delimiter + *str + delimiter;
+    msg = "-" + *str + delimiter;
   } else if (type == "integer") {
     msg = ":" + *str + delimiter;
   }

@@ -1,14 +1,17 @@
 #include "server.hpp"
 #include "../common/decoder.hpp"
+#include "../common/encoder.hpp"
 #include "../common/logger.hpp"
 #include "../common/makeSocketNonBlocking.hpp"
 #include "../common/operate.hpp"
 #include "config.hpp"
+#include "group.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
 #include <netinet/in.h>
 #include <sys/epoll.h>
+#include <sys/eventfd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -76,7 +79,8 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
                          std::deque<Operation> &operationQueue,
                          std::deque<WriteSocketMessage> &writeSocketQueue,
                          unordered_map<std::string, GroupQueueEventFd> &groups,
-                         unordered_map<int, FdGroupLCP> &fdGroupLCPMap) {
+                         unordered_map<int, FdGroupLCP> &fdGroupLCPMap,
+                         int epollFd) {
   // Read few bytes
   // If socket still has data, re-queue
 
@@ -155,7 +159,76 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
           sockGroupData->second.queue.enqueue(queueMsg);
           groupEventFds[sock.group] = sockGroupData->second.eventFd;
         } else if (parsed.operation == "GREGISTRATION_LCP") {
+          auto grp = groups.find(parsed.reg.group);
+          string res;
+          if (grp != groups.end()) {
+            logger("Group : ", grp->first, " already exists");
+            res = "0";
+          } else {
+            logger("Creating new group with ConcurrentQueue & eventFd : ",
+                   parsed.reg.group);
+
+            groups.emplace(
+                parsed.reg.group,
+                GroupQueueEventFd{moodycamel::ConcurrentQueue<
+                                      GroupConcurrentSyncQueueMessage>(),
+                                  eventfd(0, EFD_NONBLOCK)});
+            logger("Created group : ", parsed.reg.group,
+                   " starting its thread...");
+            thread grpThread(group, groups[parsed.reg.group].eventFd,
+                             ref(groups[parsed.reg.group].queue),
+                             ref(parsed.reg.group));
+            logger("Started thread for group : ", parsed.reg.group);
+            res = "1";
+          }
+
+          WriteSocketMessage response;
+          response.fd = msg.fd;
+          response.response = encoder(&res, "integer");
+          writeSocketQueue.push_back(response);
         } else if (parsed.operation == "GREGISTRATION_CONNECTION") {
+          // From the perspective of LCP
+          // Type of a connection can be : receiver, sender, health
+
+          // Group should already exists at this point for each connection
+          // as it is created in GREGISTRATION_LCP
+          //
+          // for type : receiver
+          //  Remove from current epoll monitoring
+          //  Add to fd-group-lcp hashmap
+
+          if (parsed.reg.type == "receiver") {
+            logger("Adding to fdGroupLCPMap, fd : ", msg.fd);
+            FdGroupLCP fdData;
+            fdData.group = parsed.reg.group;
+            fdData.lcp = parsed.reg.lcp;
+            fdGroupLCPMap[msg.fd] = fdData;
+
+            // Remove from server thread epoll monitoring
+            logger("Removing from server thread epoll monitoring, fd : ",
+                   msg.fd);
+            if (epoll_ctl(epollFd, EPOLL_CTL_DEL, msg.fd, nullptr) == -1) {
+              logger(
+                  "Error while removing from server thread monitoring, fd : ",
+                  msg.fd, " group : ", parsed.reg.group);
+              perror("removing from monitoring error epoll_ctl");
+              logger("Closing connection for fd : ", msg.fd);
+              close(msg.fd);
+              continue;
+            }
+
+            // Push to Group ConcurrentQueue for registration
+            logger("Adding to ConcurrentQueue for registration, Group : ",
+                   parsed.reg.group, " fd : ", msg.fd);
+            GroupConcurrentSyncQueueMessage regMessage;
+            regMessage.lcp = parsed.reg.lcp;
+            regMessage.fd = msg.fd;
+            regMessage.connectionRegistration = true;
+            groups[parsed.reg.group].queue.enqueue(regMessage);
+            logger("Pushed fd : ", msg.fd,
+                   " to ConcurrentQueue of Group : ", parsed.reg.group);
+          }
+
         } else {
           // Push to operation queue
           logger("Pushing to operation queue, op : ", parsed.operation);
@@ -303,7 +376,7 @@ void server(std::unordered_map<std::string, GroupQueueEventFd> &groups) {
 
     epollIO(epollFd, socketFd, ev, events, timeout, readSocketQueue);
     readFromSocketQueue(readSocketQueue, operationQueue, writeSocketQueue,
-                        groups, FdGroupLCPMap);
+                        groups, FdGroupLCPMap, epollFd);
     performOperation(readSocketQueue, operationQueue, writeSocketQueue);
     writeToSocketQueue(writeSocketQueue);
 

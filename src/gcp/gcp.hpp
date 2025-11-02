@@ -12,7 +12,7 @@ struct GroupConcurrentSyncQueueMessage {
 };
 
 struct GroupQueueEventFd {
-  moodycamel::ConcurrentQueue<GroupConcurrentSyncQueueMessage> &queue;
+  moodycamel::ConcurrentQueue<GroupConcurrentSyncQueueMessage> queue;
   int eventFd;
 };
 

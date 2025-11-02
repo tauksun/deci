@@ -244,7 +244,7 @@ DecodedMessage decoder(string &str) {
     count++;
     offset += timestampLength + 2;
 
-  } else if (op == "GREGISTRATION") {
+  } else if (op == "GREGISTRATION_CONNECTION") {
     // Extract : Group, LCP, Type
 
     // Group
@@ -294,6 +294,24 @@ DecodedMessage decoder(string &str) {
     msg.reg.type = str.substr(offset, typeLength);
     count++;
     offset += typeLength + 2;
+  } else if (op == "GREGISTRATION_LCP") {
+    // Extract : Group
+
+    // Group
+    if (len < offset) {
+      msg.error.partial = true;
+      return msg;
+    }
+    if (str[offset] != '$') {
+      msg.error.invalid = true;
+      return msg;
+    }
+    offset++;
+
+    int groupLength = extractLength(offset, str);
+    msg.reg.group = str.substr(offset, groupLength);
+    count++;
+    offset += groupLength + 2;
   }
 
   if (count < numberOfElements) {
