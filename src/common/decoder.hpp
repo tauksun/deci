@@ -7,4 +7,6 @@ using namespace std;
 
 DecodedMessage decoder(string &);
 
+int extractLength(int &offset, std::string &str);
+
 #endif

@@ -7,20 +7,8 @@
  * */
 
 #include "responseDecoder.hpp"
+#include "decoder.hpp"
 #include <string>
-
-int extractLength(int &offset, string &str) {
-  string oplen = "";
-  for (int i = offset; str[i] != '\r'; i++) {
-
-    oplen += str[i];
-    offset++;
-  }
-
-  // Increment offset to the pos after the limiters
-  offset += 2;
-  return stoi(oplen);
-}
 
 DecodedResponse responseDecoder(string &response) {
   DecodedResponse decodedResponse;

@@ -1,5 +1,5 @@
-#ifndef COMMON_DECODER
-#define COMMON_DECODER
+#ifndef COMMON_RESPONSE_DECODER
+#define COMMON_RESPONSE_DECODER
 
 #include <string>
 using namespace std;
