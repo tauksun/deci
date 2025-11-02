@@ -14,7 +14,7 @@
 #include <unistd.h>
 #include <unordered_map>
 
-unordered_map<string, string> cache;
+unordered_map<string, CacheValue> cache;
 
 void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
              struct epoll_event *events, int timeout,
@@ -181,7 +181,7 @@ void performOperation(std::deque<ReadSocketMessage> &readSocketQueue,
     logger("Performing operation");
     Operation op = operationQueue.front();
     logger("Op : ", op.msg.operation);
-    operate(op, &response, cache);
+    operate(op, response, cache);
 
     // Send Response
     response.fd = op.fd;
@@ -220,7 +220,7 @@ void readFromSynchronizationQueue(
     if (!found) {
       break;
     }
-    operate(msg, &response, cache);
+    operate(msg, response, cache);
     response.fd = msg.fd;
     writeSocketQueue.push_back(response);
   }

@@ -28,4 +28,9 @@ struct WriteSocketSyncMessage {
   string query = "";
 };
 
+struct CacheValue {
+  string data;
+  int64_t timestamp;
+};
+
 #endif

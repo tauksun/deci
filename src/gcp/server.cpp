@@ -14,7 +14,7 @@
 #include <unistd.h>
 #include <unordered_map>
 
-unordered_map<string, string> cache;
+unordered_map<string, CacheValue> cache;
 
 bool isSyncMessage(string &op) {
   if (op == "SET" || op == "DEL") {
@@ -195,7 +195,7 @@ void performOperation(std::deque<ReadSocketMessage> &readSocketQueue,
     logger("Performing operation");
     Operation op = operationQueue.front();
     logger("Op : ", op.msg.operation);
-    operate(op, &response, cache);
+    operate(op, response, cache);
 
     // Send Response
     response.fd = op.fd;
