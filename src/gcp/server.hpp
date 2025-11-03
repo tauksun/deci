@@ -1,5 +1,5 @@
-#ifndef LCP_SERVER
-#define LCP_SERVER
+#ifndef GCP_SERVER
+#define GCP_SERVER
 
 #include "gcp.hpp"
 #include <string>
