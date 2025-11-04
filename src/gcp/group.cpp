@@ -11,7 +11,7 @@
 
 int epollIO(int epollFd, int eventFd, struct epoll_event &ev,
             struct epoll_event *events, int timeout,
-            std::deque<ReadSocketMessage> &readSocketQueue, string &groupName) {
+            std::deque<ReadSocketMessage> &readSocketQueue) {
 
   int readyFds =
       epoll_wait(epollFd, events, configGCP::MAX_CONNECTIONS, timeout);
@@ -23,15 +23,14 @@ int epollIO(int epollFd, int eventFd, struct epoll_event &ev,
   for (int n = 0; n < readyFds; ++n) {
     if (events[n].data.fd == eventFd) {
       // Reading 1 Byte from eventFd (resets its counter)
-      logger("Reading eventFd for group : ", groupName);
+      logger("Reading eventFd for group ");
       uint64_t counter;
       read(eventFd, &counter, sizeof(counter));
-      logger("Read eventFd counter : ", counter, " group : ", groupName);
+      logger("Read eventFd counter : ", counter);
     } else {
       // Read LCP sockets synchronization response
       // Push into readSocketQueue
-      logger("Group : ", groupName,
-             " : adding to readSocketQueue, fd : ", events[n].data.fd);
+      logger("Adding to readSocketQueue, fd : ", events[n].data.fd);
       ReadSocketMessage msg;
       msg.fd = events[n].data.fd;
       msg.data = "";
@@ -228,60 +227,63 @@ void writeToSocketQueue(std::deque<WriteSocketMessage> &writeSocketQueue) {
 }
 
 int group(int eventFd,
-          moodycamel::ConcurrentQueue<GroupConcurrentSyncQueueMessage> &queue,
-          std::string &groupName) {
+          moodycamel::ConcurrentQueue<GroupConcurrentSyncQueueMessage> &queue) {
+  try {
+    logger("Group thread started");
 
-  logger("Group : ", groupName);
-  std::unordered_map<std::string, std::deque<int>> lcpQueueMap;
+    std::unordered_map<std::string, std::deque<int>> lcpQueueMap;
 
-  // Maximum connections of all LCP combined in a group will be less than or
-  // equal (if only single group is present) to configGCP::MAX_CONNECTIONS
-  struct epoll_event ev, events[configGCP::MAX_CONNECTIONS];
+    // Maximum connections of all LCP combined in a group will be less than or
+    // equal (if only single group is present) to configGCP::MAX_CONNECTIONS
+    struct epoll_event ev, events[configGCP::MAX_CONNECTIONS];
 
-  int epollFd = epoll_create1(0);
-  if (epollFd == -1) {
-    perror("epoll create error");
-    // Don't throw error here as other groups could still be running
-    return -1;
-  }
-
-  // Add group eventFd for monitoring
-  // Configure Edge triggered
-  ev.events = EPOLLIN | EPOLLET;
-  ev.data.fd = eventFd;
-
-  if (epoll_ctl(epollFd, EPOLL_CTL_ADD, eventFd, &ev) == -1) {
-    perror("group epoll_ctl eventFd");
-    return -1;
-  }
-
-  int timeout = -1;
-  std::deque<ReadSocketMessage> readSocketQueue;
-  std::deque<WriteSocketSyncMessage> writeSocketSyncQueue;
-  std::deque<WriteSocketMessage> writeSocketQueue;
-  unordered_map<int, string> fdLCPMap;
-
-  while (1) {
-    if (epollIO(epollFd, eventFd, ev, events, timeout, readSocketQueue,
-                groupName)) {
-
+    logger("Creating epoll for group");
+    int epollFd = epoll_create1(0);
+    if (epollFd == -1) {
+      perror("epoll create error");
+      // Don't throw error here as other groups could still be running
       return -1;
     }
 
-    readFromSocketQueue(readSocketQueue, lcpQueueMap, fdLCPMap);
-    readFromGroupConcurrentSyncQueue(queue, lcpQueueMap, fdLCPMap,
-                                     writeSocketSyncQueue, writeSocketQueue,
-                                     epollFd, ev, events);
-    writeToSocketSyncQueue(writeSocketSyncQueue);
-    writeToSocketQueue(writeSocketQueue);
+    // Add group eventFd for monitoring
+    // Configure Edge triggered
+    logger("Configuring epoll as Edge-triggered for group");
+    ev.events = EPOLLIN | EPOLLET;
+    ev.data.fd = eventFd;
 
-    // Timeout
-    if (readSocketQueue.size() || writeSocketQueue.size() ||
-        writeSocketSyncQueue.size() || queue.size_approx()) {
-      timeout = 0;
-    } else {
-      timeout = -1;
+    if (epoll_ctl(epollFd, EPOLL_CTL_ADD, eventFd, &ev) == -1) {
+      perror("group epoll_ctl eventFd");
+      return -1;
     }
+
+    int timeout = -1;
+    std::deque<ReadSocketMessage> readSocketQueue;
+    std::deque<WriteSocketSyncMessage> writeSocketSyncQueue;
+    std::deque<WriteSocketMessage> writeSocketQueue;
+    unordered_map<int, string> fdLCPMap;
+
+    while (1) {
+      if (epollIO(epollFd, eventFd, ev, events, timeout, readSocketQueue)) {
+        return -1;
+      }
+
+      readFromSocketQueue(readSocketQueue, lcpQueueMap, fdLCPMap);
+      readFromGroupConcurrentSyncQueue(queue, lcpQueueMap, fdLCPMap,
+                                       writeSocketSyncQueue, writeSocketQueue,
+                                       epollFd, ev, events);
+      writeToSocketSyncQueue(writeSocketSyncQueue);
+
+      // Timeout
+      if (readSocketQueue.size() || writeSocketQueue.size() ||
+          writeSocketSyncQueue.size() || queue.size_approx()) {
+        timeout = 0;
+      } else {
+        timeout = -1;
+      }
+    }
+  } catch (const std::exception &ex) {
+    logger("Exception in group thread: ", ex.what());
+    return -1;
   }
 
   return 0;
