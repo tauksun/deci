@@ -230,6 +230,17 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
             groups[parsed.reg.group].queue.enqueue(regMessage);
             logger("Pushed fd : ", msg.fd,
                    " to ConcurrentQueue of Group : ", parsed.reg.group);
+
+            groupEventFds[parsed.reg.group] = groups[parsed.reg.group].eventFd;
+          } else {
+            logger(
+                "Queuing response for LCP connection registration of type : ",
+                configCommon::SENDER_CONNECTION_TYPE, " fd : ", msg.fd);
+            string res = "1";
+            WriteSocketMessage response;
+            response.fd = msg.fd;
+            response.response = encoder(&res, "integer");
+            writeSocketQueue.push_back(response);
           }
 
         } else {

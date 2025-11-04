@@ -75,7 +75,8 @@ int lcpRegistration() {
 }
 
 int connectionRegistration(int connSockFd, string type, string lcpId) {
-  logger("Registration LCP connection with GCP, connSockFd: ", connSockFd);
+  logger("Registration LCP connection with GCP, connSockFd: ", connSockFd,
+         " type : ", type);
 
   // GREGISTRATION_CONNECTION groupName lcpName typeOfConnection
   vector<QueryArrayElement> registration;
@@ -102,8 +103,9 @@ int connectionRegistration(int connSockFd, string type, string lcpId) {
 
   string regQuery = encoder(registration);
 
-  logger("Generated LCP connection registration query : ", regQuery);
-  logger("Writing query to GCP, connSockFd: ", connSockFd);
+  logger("Generated LCP connection registration query : ", regQuery,
+         " type : ", type);
+  logger("Writing query to GCP, connSockFd: ", connSockFd, " type", type);
 
   int writtenBytes = write(connSockFd, regQuery.c_str(), regQuery.length());
   if (writtenBytes == -1) {
@@ -112,7 +114,7 @@ int connectionRegistration(int connSockFd, string type, string lcpId) {
   };
 
   logger("Reading LCP connection registration response for connSockFd : ",
-         connSockFd);
+         connSockFd, " type : ", type);
   char response[10];
 
   int bytesRead = read(connSockFd, response, sizeof(response));
