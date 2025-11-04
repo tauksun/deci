@@ -175,10 +175,12 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
                                   eventfd(0, EFD_NONBLOCK)});
             logger("Created group : ", parsed.reg.group,
                    " starting its thread...");
-            thread grpThread(group, groups[parsed.reg.group].eventFd,
-                             ref(groups[parsed.reg.group].queue),
-                             ref(parsed.reg.group));
-            logger("Started thread for group : ", parsed.reg.group);
+
+            GroupQueueEventFd &groupData = groups[parsed.reg.group];
+            std::thread grpThread(group, groupData.eventFd,
+                                  std::ref(groupData.queue));
+            grpThread.detach();
+            logger("Started thread for group");
             res = "1";
           }
 

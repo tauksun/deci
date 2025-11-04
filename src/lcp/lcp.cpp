@@ -4,6 +4,7 @@
 #include "config.hpp"
 #include "globalCacheOps.hpp"
 #include "health.hpp"
+#include "registration.hpp"
 #include "server.hpp"
 #include "synchronizationOps.hpp"
 #include <functional>
@@ -27,6 +28,10 @@ int main() {
   std::thread serverThread(server, configLCP::sock, ref(GlobalCacheOpsQueue),
                            ref(SynchronizationQueue), globalCacheThreadEventFd,
                            synchronizationEventFd);
+
+  // Synchronously register with GCP
+  lcpRegistration();
+
   std::thread healthThread(health);
   std::thread GlobalCacheOpsThread(globalCacheOps, ref(GlobalCacheOpsQueue),
                                    globalCacheThreadEventFd);

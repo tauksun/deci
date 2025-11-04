@@ -17,3 +17,15 @@ string encoder(string *str, string type) {
 
   return msg;
 }
+
+string encoder(vector<QueryArrayElement> &params) {
+  string query;
+
+  int arraySize = params.size();
+  query += "*" + to_string(arraySize) + delimiter;
+  for (int i = 0; i < arraySize; i++) {
+    query += encoder(&params[i].value, params[i].type);
+  }
+
+  return query;
+}
