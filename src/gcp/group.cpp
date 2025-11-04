@@ -9,9 +9,9 @@
 #include <unistd.h>
 #include <unordered_map>
 
-int epollIO(int epollFd, int eventFd, struct epoll_event &ev,
-            struct epoll_event *events, int timeout,
-            std::deque<ReadSocketMessage> &readSocketQueue) {
+int gEpollIO(int epollFd, int eventFd, struct epoll_event &ev,
+             struct epoll_event *events, int timeout,
+             std::deque<ReadSocketMessage> &readSocketQueue) {
 
   int readyFds =
       epoll_wait(epollFd, events, configGCP::MAX_CONNECTIONS, timeout);
@@ -211,7 +211,7 @@ void writeToSocketSyncQueue(
   }
 }
 
-void writeToSocketQueue(std::deque<WriteSocketMessage> &writeSocketQueue) {
+void gWriteToSocketQueue(std::deque<WriteSocketMessage> &writeSocketQueue) {
   // Write few bytes & keep writing till whole content is written
 
   long pos = 0;
@@ -263,7 +263,7 @@ int group(int eventFd,
     unordered_map<int, string> fdLCPMap;
 
     while (1) {
-      if (epollIO(epollFd, eventFd, ev, events, timeout, readSocketQueue)) {
+      if (gEpollIO(epollFd, eventFd, ev, events, timeout, readSocketQueue)) {
         return -1;
       }
 
@@ -272,6 +272,7 @@ int group(int eventFd,
                                        writeSocketSyncQueue, writeSocketQueue,
                                        epollFd, ev, events);
       writeToSocketSyncQueue(writeSocketSyncQueue);
+      gWriteToSocketQueue(writeSocketQueue);
 
       // Timeout
       if (readSocketQueue.size() || writeSocketQueue.size() ||
