@@ -3,9 +3,10 @@
 
 #include "../common/common.hpp"
 #include "../deps/concurrentQueue.hpp"
+#include <string>
 
 void cacheSynchronization(
     moodycamel::ConcurrentQueue<Operation> &SynchronizationQueue,
-    int synchronizationEventFd);
+    int synchronizationEventFd, string lcpId);
 
 #endif

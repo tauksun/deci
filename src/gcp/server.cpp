@@ -1,4 +1,5 @@
 #include "server.hpp"
+#include "../common/config.hpp"
 #include "../common/decoder.hpp"
 #include "../common/encoder.hpp"
 #include "../common/logger.hpp"
@@ -199,7 +200,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
           //  Remove from current epoll monitoring
           //  Add to fd-group-lcp hashmap
 
-          if (parsed.reg.type == "receiver") {
+          if (parsed.reg.type == configCommon::RECEIVER_CONNECTION_TYPE) {
             logger("Adding to fdGroupLCPMap, fd : ", msg.fd);
             FdGroupLCP fdData;
             fdData.group = parsed.reg.group;

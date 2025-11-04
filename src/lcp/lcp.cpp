@@ -1,5 +1,6 @@
 #include "lcp.hpp"
 #include "../common/logger.hpp"
+#include "../common/randomId.hpp"
 #include "../deps/concurrentQueue.hpp"
 #include "config.hpp"
 #include "globalCacheOps.hpp"
@@ -13,7 +14,8 @@
 
 int main() {
   initializeLogger();
-  logger("Starting lcp");
+  string lcpId = generateRandomId();
+  logger("Starting lcp : ", lcpId);
 
   logger("Intializing listening server");
 
@@ -34,9 +36,10 @@ int main() {
 
   std::thread healthThread(health);
   std::thread GlobalCacheOpsThread(globalCacheOps, ref(GlobalCacheOpsQueue),
-                                   globalCacheThreadEventFd);
-  std::thread SynchronizationThread(
-      cacheSynchronization, ref(SynchronizationQueue), synchronizationEventFd);
+                                   globalCacheThreadEventFd, lcpId);
+  std::thread SynchronizationThread(cacheSynchronization,
+                                    ref(SynchronizationQueue),
+                                    synchronizationEventFd, lcpId);
 
   // TODO: Learn more about this & the best practices around it
   serverThread.join();

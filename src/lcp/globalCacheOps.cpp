@@ -1,10 +1,12 @@
 #include "globalCacheOps.hpp"
 #include "../common/common.hpp"
+#include "../common/config.hpp"
 #include "../common/logger.hpp"
 #include "../common/makeSocketNonBlocking.hpp"
 #include "../common/responseDecoder.hpp"
 #include "config.hpp"
 #include "connect.hpp"
+#include "registration.hpp"
 #include <deque>
 #include <sys/epoll.h>
 #include <unistd.h>
@@ -163,7 +165,7 @@ void readFromConcurrentQueue(
 
 void globalCacheOps(
     moodycamel::ConcurrentQueue<GlobalCacheOpMessage> &GlobalCacheOpsQueue,
-    int globalCacheThreadEventFd) {
+    int globalCacheThreadEventFd, string lcpId) {
 
   int timeout = -1;
   std::deque<int> connectionPool;
@@ -200,6 +202,18 @@ void globalCacheOps(
       perror("globalCacheOps thread : fcntl connSockFd");
       continue;
     }
+
+    // Synchronously register connection
+    if (connectionRegistration(connSockFd, configCommon::SENDER_CONNECTION_TYPE,
+                               lcpId) == -1) {
+      logger("globalCacheOps thread : Failed to register connection with "
+             "GCP");
+      continue;
+    }
+
+    logger("globalCacheOps thread : Successfully registered connection "
+           "with GCP, connSockFd : ",
+           connSockFd);
 
     // Add for monitoring
     ev.events = EPOLLIN | EPOLLET;

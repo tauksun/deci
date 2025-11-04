@@ -3,9 +3,10 @@
 
 #include "../deps/concurrentQueue.hpp"
 #include "lcp.hpp"
+#include <string>
 
 void globalCacheOps(
     moodycamel::ConcurrentQueue<GlobalCacheOpMessage> &GlobalCacheOpsQueue,
-    int globalCacheThreadEventFd);
+    int globalCacheThreadEventFd, std::string lcpId);
 
 #endif

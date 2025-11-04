@@ -1,9 +1,11 @@
 #include "synchronizationOps.hpp"
+#include "../common/config.hpp"
 #include "../common/decoder.hpp"
 #include "../common/logger.hpp"
 #include "../common/makeSocketNonBlocking.hpp"
 #include "config.hpp"
 #include "connect.hpp"
+#include "registration.hpp"
 #include <deque>
 #include <sys/epoll.h>
 #include <unistd.h>
@@ -96,7 +98,7 @@ void triggerEventfd(int synchronizationEventFd) {
 
 void cacheSynchronization(
     moodycamel::ConcurrentQueue<Operation> &SynchronizationQueue,
-    int synchronizationEventFd) {
+    int synchronizationEventFd, string lcpId) {
 
   // Initialize epoll
   struct epoll_event ev, events[configLCP::MAX_SYNC_CONNECTIONS];
@@ -111,6 +113,12 @@ void cacheSynchronization(
   for (int i = 0; i < configLCP::MAX_SYNC_CONNECTIONS; i++) {
     int connSockFd = establishConnection(configLCP::GCP_SERVER_IP,
                                          configLCP::GCP_SERVER_PORT);
+    if (connSockFd == -1) {
+      perror("cacheSynchronization thread: Failed to establishConnection with "
+             "GCP");
+      continue;
+    }
+
     // Make fd non-blocking
     if (makeSocketNonBlocking(connSockFd)) {
       perror("cacheSynchronization thread : fcntl connSockFd");
@@ -120,6 +128,18 @@ void cacheSynchronization(
     // Add for monitoring
     ev.events = EPOLLIN | EPOLLET;
     ev.data.fd = connSockFd;
+
+    // Synchronously register connection
+    if (connectionRegistration(
+            connSockFd, configCommon::RECEIVER_CONNECTION_TYPE, lcpId) == -1) {
+      logger("cacheSynchronization thread: Failed to register connection with "
+             "GCP");
+      continue;
+    }
+
+    logger("cacheSynchronization thread : Successfully registered connection "
+           "with GCP, connSockFd : ",
+           connSockFd);
 
     logger("cacheSynchronization thread : Adding connection : ", connSockFd,
            " for monitoring by epoll");
