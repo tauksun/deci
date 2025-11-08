@@ -63,7 +63,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
 
     int readBytes = read(msg.fd, buf, configLCP::MAX_READ_BYTES);
     logger("globalCacheOps thread : Read ", readBytes,
-           " bytes from fd : ", msg.data);
+           " bytes from fd : ", msg.fd);
     if (readBytes == 0) {
       // Connection closed by peer
       logger("No bytes read, closing connection for fd : ", msg.fd);
@@ -162,6 +162,7 @@ void readFromConcurrentQueue(
     moodycamel::ConcurrentQueue<GlobalCacheOpMessage> &GlobalCacheOpsQueue,
     std::deque<int> &connectionPool, unordered_map<int, int> &socketReqResMap) {
 
+  logger("globalCacheOps thread : In readFromConcurrentQueue");
   // check connectionPool > if available : send query to GCP
   for (int i = 0;; i++) {
     int isConnectionAvailable = connectionPool.size();

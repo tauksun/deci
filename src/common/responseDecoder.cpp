@@ -32,8 +32,8 @@ DecodedResponse responseDecoder(string &response) {
   }
   // :1234\r\n
   else if (type == ':') {
-    int integerLength = extractLength(offset, response);
-    if (response.length() < offset + integerLength + 1) { // +1 for delimiter
+    extractLength(offset, response);
+    if (response.length() < offset) {
       decodedResponse.error.partial = true;
       return decodedResponse;
     }
