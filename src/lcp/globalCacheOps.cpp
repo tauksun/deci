@@ -15,7 +15,7 @@
 void epollIO(int epollFd, struct epoll_event *events,
              std::deque<ReadSocketMessage> &readSocketQueue, int timeout,
              int globalCacheThreadEventFd) {
-
+  logger("globalCacheOps thread : In epollIO");
   int readyFds =
       epoll_wait(epollFd, events, configLCP::MAX_GCP_CONNECTIONS, timeout);
 
@@ -24,13 +24,15 @@ void epollIO(int epollFd, struct epoll_event *events,
     exit(EXIT_FAILURE);
   }
 
+  logger("globalCacheOps thread : Looping on readyFds : ", readyFds);
   for (int n = 0; n < readyFds; ++n) {
     if (events[n].data.fd == globalCacheThreadEventFd) {
       // Reading 1 Byte from eventFd (resets its counter)
-      logger("Reading from globalCacheThreadEventFd");
+      logger("globalCacheOps thread : Reading from globalCacheThreadEventFd");
       uint64_t counter;
       read(globalCacheThreadEventFd, &counter, sizeof(counter));
-      logger("Read globalCacheThreadEventFd counter : ", counter);
+      logger("globalCacheOps thread : Read globalCacheThreadEventFd counter : ",
+             counter);
     } else {
       // Add to readSocketQueue
       logger("globalCacheOps thread : Adding to readSocketQueue : ",
@@ -51,6 +53,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
   // Read few bytes
   // If socket still has data, re-queue
 
+  logger("globalCacheOps thread : In readFromSocketQueue");
   long pos = 0;
   long currentSize = readSocketQueue.size();
 
@@ -59,14 +62,23 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
     ReadSocketMessage msg = readSocketQueue.front();
 
     int readBytes = read(msg.fd, buf, configLCP::MAX_READ_BYTES);
+    logger("globalCacheOps thread : Read ", readBytes,
+           " bytes from fd : ", msg.data);
     if (readBytes == 0) {
       // Connection closed by peer
+      logger("No bytes read, closing connection for fd : ", msg.fd);
       close(msg.fd);
+      continue;
     } else if (readBytes < 0) {
+      logger("globalCacheOps thread : readBytes < 0, for fd : ", msg.fd);
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
         // No data now, skip
+        logger("globalCacheOps thread : Received EAGAIN for fd : ", msg.fd);
       } else {
         // Other error, clean up
+
+        logger("globalCacheOps thread : Error occured while reading for fd : ",
+               msg.fd);
         close(msg.fd);
       }
     } else if (readBytes > 0) {
@@ -77,18 +89,24 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
     if (readBytes == configLCP::MAX_READ_BYTES) {
       // more data to read, Re-queue
       readSocketQueue.push_back(msg);
-    } else {
+    } else if (readBytes > 0) {
       // Decode the response
+      logger("globalCacheOps thread : Decoding response on fd : ", msg.fd,
+             " response : ", msg.data);
       DecodedResponse decodedResponse = responseDecoder(msg.data);
       if (decodedResponse.error.partial) {
         // If response is decoded partially, re-queue in readSocketQueue
-        logger("Partially decoded, re-queuing");
+        logger("globalCacheOps thread : Partially decoded, re-queuing");
         readSocketQueue.push_back(msg);
       } else if (decodedResponse.error.invalid) {
-        logger("Invalid response: ", msg.data);
+        logger("globalCacheOps thread : Invalid response, closing connection "
+               "for fd : ",
+               msg.fd, " response : ", msg.data);
         close(msg.fd);
       } else {
-        logger("Successfully decoded response");
+        logger(
+            "globalCacheOps thread : Successfully decoded response for fd : ",
+            msg.fd);
         // Write to Socket Queue for Application logic
         // Else > Add back to connection pool
 
@@ -100,13 +118,20 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
           response.fd = val->second; // Fetched from the hashmap
           response.response = msg.data;
           writeSocketQueue.push_back(response);
-          logger("Erasing entry from socketReqResMap for : ", msg.fd);
+          logger("globalCacheOps thread : Erasing entry from socketReqResMap "
+                 "for : ",
+                 msg.fd);
           socketReqResMap.erase(msg.fd);
         }
 
         logger("globalCacheOps thread : adding ", msg.fd,
                " back to connection pool");
         connectionPool.push_back(msg.fd);
+
+        // Re-queue for event loop to read this till EAGAIN
+        msg.data = "";
+        msg.readBytes = 0;
+        readSocketQueue.push_back(msg);
       }
     }
 
@@ -121,9 +146,11 @@ void writeToApplicationSocket(
 
   long pos = 0;
   long currentSize = writeSocketQueue.size();
-
+  logger("globalCacheOps thread : In writeToApplicationSocket");
   while (pos < currentSize) {
     WriteSocketMessage response = writeSocketQueue.front();
+    logger("globalCacheOps thread : Writing to fd : ", response.fd,
+           " response : ", response.response);
     write(response.fd, response.response.c_str(), response.response.length());
 
     writeSocketQueue.pop_front();
@@ -143,22 +170,32 @@ void readFromConcurrentQueue(
       break;
     }
 
+    logger("globalCacheOps thread : Connection pool has : ",
+           isConnectionAvailable, " connections");
+
     GlobalCacheOpMessage msg;
     bool found = GlobalCacheOpsQueue.try_dequeue(msg);
     if (!found) {
-      logger("GlobalCacheOpsQueue is empty");
+      logger("globalCacheOps thread : GlobalCacheOpsQueue is empty");
       break;
     }
 
     // Write to a socket connection from connectionPool
     int connSock = connectionPool.front();
+    logger("globalCacheOps thread : Retrieved connection from pool, fd : ",
+           connSock);
+
     write(connSock, msg.op.c_str(), msg.op.length());
 
     // Add in socketReqResMap for application queries
     if (msg.fd != -1) {
+      logger("globalCacheOps thread : Adding to socketReqResMap for "
+             "application queries, connSock : ",
+             connSock, " application fd : ", msg.fd);
       socketReqResMap[connSock] = msg.fd;
     }
 
+    logger("globalCacheOps thread : Poping from connection pool");
     connectionPool.pop_front();
   }
 }
@@ -197,11 +234,6 @@ void globalCacheOps(
 
     int connSockFd = establishConnection(configLCP::GCP_SERVER_IP,
                                          configLCP::GCP_SERVER_PORT);
-    // Make fd non-blocking
-    if (makeSocketNonBlocking(connSockFd)) {
-      perror("globalCacheOps thread : fcntl connSockFd");
-      continue;
-    }
 
     // Synchronously register connection
     if (connectionRegistration(connSockFd, configCommon::SENDER_CONNECTION_TYPE,
@@ -214,6 +246,14 @@ void globalCacheOps(
     logger("globalCacheOps thread : Successfully registered connection "
            "with GCP, connSockFd : ",
            connSockFd);
+
+    // Make fd non-blocking
+    logger("globalCacheOps thread : Making non-blocking connSockFd : ",
+           connSockFd);
+    if (makeSocketNonBlocking(connSockFd)) {
+      perror("globalCacheOps thread : fcntl connSockFd");
+      continue;
+    }
 
     // Add for monitoring
     ev.events = EPOLLIN | EPOLLET;
@@ -228,6 +268,8 @@ void globalCacheOps(
     }
 
     // Add to connection pool
+    logger("globalCacheOps thread : Adding to connection pool, fd : ",
+           connSockFd);
     connectionPool.push_back(connSockFd);
   }
 
@@ -239,6 +281,7 @@ void globalCacheOps(
    * socketFd to socketReqResMap set timeout for epoll
    * */
 
+  logger("globalCacheOps thread : Starting eventLoop");
   while (1) {
     epollIO(epollFd, events, readSocketQueue, timeout,
             globalCacheThreadEventFd);

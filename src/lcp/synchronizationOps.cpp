@@ -51,6 +51,7 @@ void readFromSocketQueue(
       // Connection closed by peer
       close(msg.fd);
     } else if (readBytes < 0) {
+      logger("cacheSynchronization thread : readBytes < 0, for fd : ", msg.fd);
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
         // No data now, skip
       } else {
@@ -65,22 +66,28 @@ void readFromSocketQueue(
     if (readBytes == configLCP::MAX_READ_BYTES) {
       // more data to read, Re-queue
       readSocketQueue.push_back(msg);
-    } else {
+    } else if (readBytes > 0) {
       // Parse the message here & push to SynchronizationQueue
       DecodedMessage parsed = decoder(msg.data);
       if (parsed.error.partial) {
         // If message is parsed partially, re-queue in readSocketQueue
-        logger("Partially parsed, re-queuing");
+        logger("cacheSynchronization thread : Partially parsed, re-queuing");
         readSocketQueue.push_back(msg);
       } else if (parsed.error.invalid) {
-        logger("Invalid message : ", msg.data);
+        logger("cacheSynchronization thread : Invalid message : ", msg.data);
         close(msg.fd);
       } else {
-        logger("Successfully parsed, adding to SynchronizationQueue");
+        logger("cacheSynchronization thread : Successfully parsed, adding to "
+               "SynchronizationQueue");
         Operation op;
         op.fd = msg.fd;
         op.msg = parsed;
         SynchronizationQueue.enqueue(op);
+
+        // Re-queue for event loop to read this till EAGAIN
+        msg.data = "";
+        msg.readBytes = 0;
+        readSocketQueue.push_back(msg);
       }
     }
 
@@ -90,10 +97,12 @@ void readFromSocketQueue(
 }
 
 void triggerEventfd(int synchronizationEventFd) {
-  logger("triggerEventfd for synchronizationEventFd");
+  logger("cacheSynchronization thread : triggerEventfd for "
+         "synchronizationEventFd");
   uint64_t counter = 1;
   write(synchronizationEventFd, &counter, sizeof(counter));
-  logger("synchronizationEventFd counter : ", counter);
+  logger("cacheSynchronization thread : synchronizationEventFd counter : ",
+         counter);
 }
 
 void cacheSynchronization(
@@ -119,16 +128,6 @@ void cacheSynchronization(
       continue;
     }
 
-    // Make fd non-blocking
-    if (makeSocketNonBlocking(connSockFd)) {
-      perror("cacheSynchronization thread : fcntl connSockFd");
-      continue;
-    }
-
-    // Add for monitoring
-    ev.events = EPOLLIN | EPOLLET;
-    ev.data.fd = connSockFd;
-
     // Synchronously register connection
     if (connectionRegistration(
             connSockFd, configCommon::RECEIVER_CONNECTION_TYPE, lcpId) == -1) {
@@ -140,6 +139,18 @@ void cacheSynchronization(
     logger("cacheSynchronization thread : Successfully registered connection "
            "with GCP, connSockFd : ",
            connSockFd);
+
+    // Make fd non-blocking
+    logger("cacheSynchronization thread : Making non-blocking connSockFd : ",
+           connSockFd);
+    if (makeSocketNonBlocking(connSockFd)) {
+      perror("cacheSynchronization thread : fcntl connSockFd");
+      continue;
+    }
+
+    // Add for monitoring
+    ev.events = EPOLLIN | EPOLLET;
+    ev.data.fd = connSockFd;
 
     logger("cacheSynchronization thread : Adding connection : ", connSockFd,
            " for monitoring by epoll");

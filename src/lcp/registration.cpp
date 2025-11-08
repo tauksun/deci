@@ -105,13 +105,15 @@ int connectionRegistration(int connSockFd, string type, string lcpId) {
 
   logger("Generated LCP connection registration query : ", regQuery,
          " type : ", type);
-  logger("Writing query to GCP, connSockFd: ", connSockFd, " type", type);
+  logger("Writing query to GCP, connSockFd: ", connSockFd, "  type ", type);
 
   int writtenBytes = write(connSockFd, regQuery.c_str(), regQuery.length());
   if (writtenBytes == -1) {
     perror("LCP Connection Registration error");
     return -1;
   };
+  logger("Type : ", type, " fd : ", connSockFd,
+         "Written bytes : ", writtenBytes);
 
   logger("Reading LCP connection registration response for connSockFd : ",
          connSockFd, " type : ", type);
@@ -119,9 +121,13 @@ int connectionRegistration(int connSockFd, string type, string lcpId) {
 
   int bytesRead = read(connSockFd, response, sizeof(response));
   if (bytesRead == 0) {
-    logger("Error while registering LCP connection, connection closed by GCP");
+    logger("Error while registering LCP connection, connection closed by GCP, "
+           "type : ",
+           type);
     return -1;
   } else if (bytesRead < 0) {
+    logger("Error while reading registration response, connSockFd : ",
+           connSockFd, " type : ", type);
     perror("Error while reading registration response");
     close(connSockFd);
     return -1;
@@ -130,13 +136,15 @@ int connectionRegistration(int connSockFd, string type, string lcpId) {
     string res(response);
     DecodedResponse msg = responseDecoder(res);
     if (msg.error.invalid) {
-      logger("Failed LCP connection registration");
+      logger("Failed LCP connection registration, type : ", type,
+             "connSockFd : ", connSockFd);
       logger("GCP response : ", res);
       close(connSockFd);
       return -1;
     }
 
-    logger("Registered LCP connection with GCP, response : ", response);
+    logger("Registered LCP connection with GCP, type : ", type,
+           " response : ", response);
   }
   return 0;
 }

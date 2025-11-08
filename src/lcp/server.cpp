@@ -30,7 +30,7 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
 
   for (int n = 0; n < readyFds; ++n) {
     if (events[n].data.fd == socketFd) {
-      logger("Accepting client connection");
+      logger("Server : Accepting client connection");
       int connSock = accept(socketFd, NULL, NULL);
       if (connSock == -1) {
         perror("connSock accept");
@@ -38,8 +38,8 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
         continue;
       }
 
-      logger("Connection accepted : ", connSock);
-      logger("Making connection non-blocking : ", connSock);
+      logger("Server : Connection accepted : ", connSock);
+      logger("Server : Making connection non-blocking : ", connSock);
       if (makeSocketNonBlocking(connSock)) {
         perror("fcntl socketFd");
         close(connSock);
@@ -49,20 +49,21 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
       ev.events = EPOLLIN | EPOLLET;
       ev.data.fd = connSock;
 
-      logger("Adding connection : ", connSock, " for monitoring by epoll");
+      logger("Server : Adding connection : ", connSock,
+             " for monitoring by epoll");
       if (epoll_ctl(epollFd, EPOLL_CTL_ADD, connSock, &ev) == -1) {
         perror("epoll_ctl: connSock");
         close(connSock);
       }
     } else if (events[n].data.fd == synchronizationEventFd) {
       // Reading 1 Byte from eventFd (resets its counter)
-      logger("Reading from synchronizationEventFd");
+      logger("Server : Reading from synchronizationEventFd");
       uint64_t counter;
       read(synchronizationEventFd, &counter, sizeof(counter));
-      logger("Read synchronizationEventFd counter : ", counter);
+      logger("Server : Read synchronizationEventFd counter : ", counter);
     } else {
       // Add to readSocketQueue
-      logger("Adding to readSocketQueue : ", events[n].data.fd);
+      logger("Server : Adding to readSocketQueue : ", events[n].data.fd);
       ReadSocketMessage sock;
       sock.fd = events[n].data.fd;
       sock.data = "";
@@ -93,11 +94,16 @@ void readFromSocketQueue(
     if (readBytes == 0) {
       // Connection closed by peer
       close(msg.fd);
+      continue;
     } else if (readBytes < 0) {
+      logger("Server : readBytes < 0, for fd : ", msg.fd);
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
         // No data now, skip
+        logger("Server : EAGAIN for fd : ", msg.fd);
       } else {
         // Other error, clean up
+        logger("Server : Error while reading from fd : ", msg.fd,
+               " closing connection");
         close(msg.fd);
       }
     } else if (readBytes > 0) {
@@ -108,25 +114,32 @@ void readFromSocketQueue(
     if (readBytes == configLCP::MAX_READ_BYTES) {
       // more data to read, Re-queue
       readSocketQueue.push_back(msg);
-    } else {
+    } else if (readBytes > 0) {
       // Parse the message here & push to operationQueue
       DecodedMessage parsed = decoder(msg.data);
       if (parsed.error.partial) {
         // If message is parsed partially, re-queue in readSocketQueue
-        logger("Partially parsed, re-queuing");
+        logger("Server : Partially parsed, re-queuing");
         readSocketQueue.push_back(msg);
       } else if (parsed.error.invalid) {
-        logger("Invalid message : ", msg.data);
+        logger("Server : Invalid message : ", msg.data);
         WriteSocketMessage errorMessage;
         errorMessage.fd = msg.fd;
         errorMessage.response = configLCP::INVALID_MESSAGE;
         writeSocketQueue.push_back(errorMessage);
+
+        // Re-queue for event loop to read this till EAGAIN
+        msg.data = "";
+        msg.readBytes = 0;
+        readSocketQueue.push_back(msg);
       } else {
-        logger("Successfully parsed, adding to operationQueue");
+        logger("Server : Successfully parsed");
         if (parsed.operation == "GGET" || parsed.operation == "GSET" ||
             parsed.operation == "GDEL" || parsed.operation == "GEXISTS") {
           // Send to another thread via eventfd & concurrent queue
           // Handle the Global cache lifecyle in that thread
+          logger("Server : pushing msg to GlobalCacheOpsQueue Global for cache "
+                 "operation");
           GlobalCacheOpMessage globalCacheMessage;
           globalCacheMessage.fd = msg.fd;
           globalCacheMessage.op = msg.data;
@@ -136,6 +149,8 @@ void readFromSocketQueue(
           // If sync flag is set, queue in sync queue & use eventfd to wake up
           // another thread
           if (parsed.flag.sync) {
+            logger(
+                "Server : pushing msg to GlobalCacheOpsQueue sync operation");
             GlobalCacheOpMessage syncMessage;
             syncMessage.fd = -1; // No file descriptor for sync messages as this
                                  // is internal operation
@@ -143,16 +158,24 @@ void readFromSocketQueue(
             // synchronization
             syncMessage.op = msg.data.substr(
                 0, msg.data.length() - 4); // subtract 4 bytes for :1\r\n
-            logger("syncMessage : ", syncMessage.op);
+            logger("Server : syncMessage : ", syncMessage.op);
             GlobalCacheOpsQueue.enqueue(syncMessage);
             pushedToGlobalCacheOpsQueue = true;
           }
 
+          logger("Server : Pushing to operation queue for op : ",
+                 parsed.operation);
           Operation op;
           op.fd = msg.fd;
           op.msg = parsed;
           operationQueue.push_back(op);
         }
+
+        // Re-queue for event loop to read this till EAGAIN
+        logger("Server : Requeing to readSocketQueue to read till EAGAIN");
+        msg.data = "";
+        msg.readBytes = 0;
+        readSocketQueue.push_back(msg);
       }
     }
 
@@ -162,6 +185,7 @@ void readFromSocketQueue(
 
   // Trigger single event for n number of messages pushed
   if (pushedToGlobalCacheOpsQueue) {
+    logger("Server : Triggering eventFd for GlobalCacheOpsQueue");
     uint64_t counter = 1;
     write(globalCacheThreadEventFd, &counter, sizeof(counter));
   }
@@ -173,14 +197,14 @@ void performOperation(std::deque<ReadSocketMessage> &readSocketQueue,
 
   long pos = 0;
   long currentSize = operationQueue.size();
-
+  logger("Server : In performOperation");
   while (pos < currentSize) {
     // Perform operation
 
     WriteSocketMessage response;
-    logger("Performing operation");
+    logger("Server : Performing operation");
     Operation op = operationQueue.front();
-    logger("Op : ", op.msg.operation);
+    logger("Server : Op : ", op.msg.operation);
     operate(op, response, cache);
 
     // Send Response
@@ -198,8 +222,12 @@ void writeToSocketQueue(std::deque<WriteSocketMessage> &writeSocketQueue) {
   long pos = 0;
   long currentSize = writeSocketQueue.size();
 
+  logger("Server : In writeToSocketQueue");
+
   while (pos < currentSize) {
     WriteSocketMessage response = writeSocketQueue.front();
+    logger("Server : sending response to fd : ", response.fd,
+           " response : ", response.response);
     write(response.fd, response.response.c_str(), response.response.length());
 
     writeSocketQueue.pop_front();
@@ -212,6 +240,7 @@ void readFromSynchronizationQueue(
     std::deque<WriteSocketMessage> &writeSocketQueue) {
   // Operate on n number of messages
 
+  logger("Server : In readFromSynchronizationQueue");
   unsigned long queueSize = SynchronizationQueue.size_approx();
   for (int i = 0; i < min(queueSize, configLCP::MAX_SYNC_MESSAGES); i++) {
     WriteSocketMessage response;
@@ -231,11 +260,11 @@ void server(
     moodycamel::ConcurrentQueue<GlobalCacheOpMessage> &GlobalCacheOpsQueue,
     moodycamel::ConcurrentQueue<Operation> &SynchronizationQueue,
     int globalCacheThreadEventFd, int synchronizationEventFd) {
-  logger("Unlinking sock : ", sock);
+  logger("Server : Unlinking sock : ", sock);
   unlink(sock);
 
   // Create
-  logger("Creating socket");
+  logger("Server : Creating socket");
   int socketFd = socket(AF_UNIX, SOCK_STREAM, 0);
   if (socketFd == -1) {
     perror("Error while creating socket");
@@ -246,7 +275,7 @@ void server(
   struct sockaddr_un listener;
   listener.sun_family = AF_UNIX;
   strcpy(listener.sun_path, sock);
-  logger("Binding socket : ", socketFd);
+  logger("Server : Binding socket : ", socketFd);
   int bindResult =
       bind(socketFd, (struct sockaddr *)&listener, sizeof(listener));
   if (bindResult != 0) {
@@ -254,7 +283,7 @@ void server(
     exit(EXIT_FAILURE);
   }
 
-  logger("Making socket re-usable : ", socketFd);
+  logger("Server : Making socket re-usable : ", socketFd);
   if (setsockopt(socketFd, SOL_SOCKET, SO_REUSEADDR, &configLCP::SOCKET_REUSE,
                  sizeof(configLCP::SOCKET_REUSE)) < 0) {
     perror("setsockopt(SO_REUSEADDR) failed");
@@ -262,7 +291,7 @@ void server(
   }
 
   // Listen
-  logger("Starting listening on : ", socketFd);
+  logger("Server : Starting listening on : ", socketFd);
   int listenResult = listen(socketFd, configLCP::MAXCONNECTIONS);
   if (listenResult != 0) {
     perror("Error while listening on socket");
@@ -272,7 +301,7 @@ void server(
   // Accept (E-Poll)
   struct epoll_event ev, events[configLCP::MAXCONNECTIONS];
 
-  logger("Making server socket non-blocking : ", socketFd);
+  logger("Server : Making server socket non-blocking : ", socketFd);
   if (makeSocketNonBlocking(socketFd)) {
     perror("fcntl socketFd");
     exit(EXIT_FAILURE);
@@ -336,6 +365,6 @@ void server(
       timeout = -1;
     }
 
-    logger("Waiting for epoll with timeout : ", timeout);
+    logger("Server : Waiting for epoll with timeout : ", timeout);
   }
 }

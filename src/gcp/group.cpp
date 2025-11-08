@@ -23,14 +23,14 @@ int gEpollIO(int epollFd, int eventFd, struct epoll_event &ev,
   for (int n = 0; n < readyFds; ++n) {
     if (events[n].data.fd == eventFd) {
       // Reading 1 Byte from eventFd (resets its counter)
-      logger("Reading eventFd for group ");
+      logger("Group : Reading eventFd for group ");
       uint64_t counter;
       read(eventFd, &counter, sizeof(counter));
-      logger("Read eventFd counter : ", counter);
+      logger("Group : Read eventFd counter : ", counter);
     } else {
       // Read LCP sockets synchronization response
       // Push into readSocketQueue
-      logger("Adding to readSocketQueue, fd : ", events[n].data.fd);
+      logger("Group : Adding to readSocketQueue, fd : ", events[n].data.fd);
       ReadSocketMessage msg;
       msg.fd = events[n].data.fd;
       msg.data = "";
@@ -59,7 +59,9 @@ void readFromSocketQueue(
     if (readBytes == 0) {
       // Connection closed by peer
       close(msg.fd);
+      continue;
     } else if (readBytes < 0) {
+      logger("Group : readBytes < 0, for fd : ", msg.fd);
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
         // No data now, skip
       } else {
@@ -74,26 +76,37 @@ void readFromSocketQueue(
     if (readBytes == configGCP::MAX_READ_BYTES) {
       // more data to read, Re-queue
       readSocketQueue.push_back(msg);
-    } else {
+    } else if (readBytes > 0) {
       // Parse the message here & push to operationQueue
       DecodedMessage parsed = decoder(msg.data);
       if (parsed.error.partial) {
         // If message is parsed partially, re-queue in readSocketQueue
-        logger("Partially parsed, re-queuing");
+        logger("Group : Partially parsed, re-queuing");
+        logger("Group : TEMP : msg : ", msg.data, " readBytes : ", readBytes);
         readSocketQueue.push_back(msg);
       } else if (parsed.error.invalid) {
-        logger("Invalid message : ", msg.data);
+        logger("Group : Invalid message : ", msg.data);
+
+        // Re-queue for event loop to read this till EAGAIN
+        msg.data = "";
+        msg.readBytes = 0;
+        readSocketQueue.push_back(msg);
       } else {
-        logger("Successfully received sync response for fd : ", msg.fd);
-        logger("Adding back to connection pool, fd : ", msg.fd);
+        logger("Group : Successfully received sync response for fd : ", msg.fd);
+        logger("Group : Adding back to connection pool, fd : ", msg.fd);
         auto fdLCP = fdLCPMap.find(msg.fd);
         string lcp = fdLCP->second;
-        logger("lcp for fd : ", msg.fd, " is : ", lcp);
-        logger("Pushing to LCP queue : ", lcp);
+        logger("Group : lcp for fd : ", msg.fd, " is : ", lcp);
+        logger("Group : Pushing to LCP queue : ", lcp);
         auto lcpQueue = lcpQueueMap.find(lcp);
         lcpQueue->second.push_back(msg.fd);
-        logger("Successfully added fd :", msg.fd,
+        logger("Group : Successfully added fd :", msg.fd,
                " back to connection pool in lcp : ", lcp);
+
+        // Re-queue for event loop to read this till EAGAIN
+        msg.data = "";
+        msg.readBytes = 0;
+        readSocketQueue.push_back(msg);
       }
     }
 
@@ -115,29 +128,32 @@ void readFromGroupConcurrentSyncQueue(
     GroupConcurrentSyncQueueMessage msg;
     bool found = queue.try_dequeue(msg);
     if (!found) {
-      logger("No more messages to read from GroupConcurrentSyncQueueMessage.");
+      logger("Group : No more messages to read from "
+             "GroupConcurrentSyncQueueMessage.");
       break;
     }
 
     if (msg.connectionRegistration) {
-      logger("Registering connection : ", msg.fd, " to lcp : ", msg.lcp);
+      logger("Group : Registering connection : ", msg.fd,
+             " to lcp : ", msg.lcp);
       auto lcpQueue = lcpQueueMap.find(msg.lcp);
       if (lcpQueue == lcpQueueMap.end()) {
-        logger("No queue is present for lcp : ", msg.lcp, " creating anew");
+        logger("Group : No queue is present for lcp : ", msg.lcp,
+               " creating anew");
         lcpQueueMap[msg.lcp] = std::deque<int>();
-        logger("Adding new connection to queue for lcp : ", msg.lcp);
+        logger("Group : Adding new connection to queue for lcp : ", msg.lcp);
         lcpQueueMap[msg.lcp].push_back(msg.fd);
       } else {
-        logger(
-            "Adding new connection to pool as queue already exists for lcp : ",
-            msg.lcp);
+        logger("Group : Adding new connection to pool as queue already exists "
+               "for lcp : ",
+               msg.lcp);
         lcpQueueMap[msg.lcp].push_back(msg.fd);
       }
 
       fdLCPMap[msg.fd] = msg.lcp;
 
       // Add for monitoring by epollFd
-      logger("Adding for monitoring by epoll, fd : ", msg.fd);
+      logger("Group : Adding for monitoring by epoll, fd : ", msg.fd);
 
       // Configure Edge triggered
       ev.events = EPOLLIN | EPOLLET;
@@ -146,31 +162,33 @@ void readFromGroupConcurrentSyncQueue(
       // Add socket descriptor for monitoring
       if (epoll_ctl(epollFd, EPOLL_CTL_ADD, msg.fd, &ev) == -1) {
         perror("epoll_ctl ");
-        logger("Failed to add for monitoring, fd : ", msg.fd);
+        logger("Group : Failed to add for monitoring, fd : ", msg.fd);
         fdLCPMap.erase(msg.fd);
         lcpQueueMap[msg.lcp].pop_back();
         continue;
       }
-      logger("Added for monitoring by epoll, fd : ", msg.fd);
+      logger("Group : Added for monitoring by epoll, fd : ", msg.fd);
 
       // Respond back to Producer LCP socket
       WriteSocketMessage response;
       response.fd = msg.fd;
       response.response = ":1\r\n";
-
+      logger("Group : Queuing LCP registration response to "
+             "writeSocketQueue");
       writeSocketQueue.push_back(response);
     } else {
       // Send sync message to other LCPs
-      logger("Sending sync op to other lcps for producer lcp : ", msg.lcp);
+      logger("Group : Sending sync op to other lcps for producer lcp : ",
+             msg.lcp);
       for (auto &pair : lcpQueueMap) {
         if (pair.first == msg.lcp) {
-          logger("Skipping self LCP");
+          logger("Group : Skipping self LCP");
           continue;
         }
 
-        logger("Sending sync to lcp : ", pair.first);
+        logger("Group : Sending sync to lcp : ", pair.first);
         if (!pair.second.size()) {
-          logger("There is no connection available in queue of lcp : ",
+          logger("Group : There is no connection available in queue of lcp : ",
                  pair.first);
           continue;
         }
@@ -181,7 +199,7 @@ void readFromGroupConcurrentSyncQueue(
         syncMessage.query = msg.query;
         writeSocketSyncQueue.push_back(syncMessage);
 
-        logger("Removing from connection pool sock : ", sock,
+        logger("Group : Removing from connection pool sock : ", sock,
                " lcp : ", pair.first);
         pair.second.pop_front();
       }
@@ -202,8 +220,10 @@ void writeToSocketSyncQueue(
   long pos = 0;
   long currentSize = writeSocketSyncQueue.size();
 
+  logger("Group : writeSocketQueue");
   while (pos < currentSize) {
     WriteSocketSyncMessage msg = writeSocketSyncQueue.front();
+    logger("Group : writeSocketQueue : fd : ", msg.fd, " msg : ", msg.query);
     write(msg.fd, msg.query.c_str(), msg.query.length());
 
     writeSocketSyncQueue.pop_front();
@@ -213,12 +233,17 @@ void writeToSocketSyncQueue(
 
 void gWriteToSocketQueue(std::deque<WriteSocketMessage> &writeSocketQueue) {
   // Write few bytes & keep writing till whole content is written
-
   long pos = 0;
   long currentSize = writeSocketQueue.size();
 
+  logger("Group : gWriteToSocketQueue");
+
   while (pos < currentSize) {
     WriteSocketMessage response = writeSocketQueue.front();
+    logger("Group : gWriteSocketQueue : fd : ", response.fd,
+           " response : ", response.response);
+    logger("Group :Responding to : ", response.fd,
+           " with : ", response.response);
     write(response.fd, response.response.c_str(), response.response.length());
 
     writeSocketQueue.pop_front();
@@ -237,7 +262,7 @@ int group(int eventFd,
     // equal (if only single group is present) to configGCP::MAX_CONNECTIONS
     struct epoll_event ev, events[configGCP::MAX_CONNECTIONS];
 
-    logger("Creating epoll for group");
+    logger("Group : Creating epoll for group");
     int epollFd = epoll_create1(0);
     if (epollFd == -1) {
       perror("epoll create error");
@@ -247,7 +272,7 @@ int group(int eventFd,
 
     // Add group eventFd for monitoring
     // Configure Edge triggered
-    logger("Configuring epoll as Edge-triggered for group");
+    logger("Group : Configuring epoll as Edge-triggered for group");
     ev.events = EPOLLIN | EPOLLET;
     ev.data.fd = eventFd;
 
@@ -283,7 +308,7 @@ int group(int eventFd,
       }
     }
   } catch (const std::exception &ex) {
-    logger("Exception in group thread: ", ex.what());
+    logger("Group : Exception in group thread: ", ex.what());
     return -1;
   }
 

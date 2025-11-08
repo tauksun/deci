@@ -40,7 +40,7 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
 
   for (int n = 0; n < readyFds; ++n) {
     if (events[n].data.fd == socketFd) {
-      logger("Accepting client connection");
+      logger("Server : Accepting client connection");
       int connSock = accept(socketFd, NULL, NULL);
       if (connSock == -1) {
         perror("connSock accept");
@@ -48,8 +48,8 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
         continue;
       }
 
-      logger("Connection accepted : ", connSock);
-      logger("Making connection non-blocking : ", connSock);
+      logger("Server : Connection accepted : ", connSock);
+      logger("Server : Making connection non-blocking : ", connSock);
       if (makeSocketNonBlocking(connSock)) {
         perror("fcntl socketFd");
         close(connSock);
@@ -59,14 +59,15 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
       ev.events = EPOLLIN | EPOLLET;
       ev.data.fd = connSock;
 
-      logger("Adding connection : ", connSock, " for monitoring by epoll");
+      logger("Server : Adding connection : ", connSock,
+             " for monitoring by epoll");
       if (epoll_ctl(epollFd, EPOLL_CTL_ADD, connSock, &ev) == -1) {
         perror("epoll_ctl: connSock");
         close(connSock);
       }
     } else {
       // Add to readSocketQueue
-      logger("Adding to readSocketQueue : ", events[n].data.fd);
+      logger("Server : Adding to readSocketQueue : ", events[n].data.fd);
       ReadSocketMessage sock;
       sock.fd = events[n].data.fd;
       sock.data = "";
@@ -99,7 +100,9 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
     if (readBytes == 0) {
       // Connection closed by peer
       close(msg.fd);
+      continue;
     } else if (readBytes < 0) {
+      logger("Server : readBytes < 0, for fd : ", msg.fd);
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
         // No data now, skip
       } else {
@@ -114,37 +117,43 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
     if (readBytes == configGCP::MAX_READ_BYTES) {
       // more data to read, Re-queue
       readSocketQueue.push_back(msg);
-    } else {
+    } else if (readBytes > 0) {
       // Parse the message here & push to operationQueue
       DecodedMessage parsed = decoder(msg.data);
       if (parsed.error.partial) {
         // If message is parsed partially, re-queue in readSocketQueue
-        logger("Partially parsed, re-queuing");
+        logger("Server : Partially parsed, re-queuing");
+        logger("Server : TEMP : msg : ", msg.data, " readBytes : ", readBytes);
         readSocketQueue.push_back(msg);
       } else if (parsed.error.invalid) {
-        logger("Invalid message : ", msg.data);
+        logger("Server : Invalid message : ", msg.data);
         WriteSocketMessage errorMessage;
         errorMessage.fd = msg.fd;
         errorMessage.response = configGCP::INVALID_MESSAGE;
         writeSocketQueue.push_back(errorMessage);
+
+        // Re-queue for event loop to read this till EAGAIN
+        msg.data = "";
+        msg.readBytes = 0;
+        readSocketQueue.push_back(msg);
       } else {
-        logger("Successfully parsed, adding to operationQueue");
+        logger("Server : Successfully parsed");
         if (isSyncMessage(parsed.operation)) {
           // Sync operation > push in group's concurrent queue
           auto val = fdGroupLCPMap.find(msg.fd);
           if (val == fdGroupLCPMap.end()) {
-            logger("Invalid msg.fd : ", msg.fd);
+            logger("Server : Invalid msg.fd : ", msg.fd);
             close(msg.fd);
             continue;
           }
 
           FdGroupLCP sock = val->second;
 
-          logger("Extracting socket group concurrent queue & eventFd");
+          logger("Server : Extracting socket group concurrent queue & eventFd");
           auto sockGroupData = groups.find(sock.group);
           if (sockGroupData == groups.end()) {
-            logger("Couldn't find socket group data, socket : ", msg.fd,
-                   " group : ", sock.group);
+            logger("Server : Couldn't find socket group data, socket : ",
+                   msg.fd, " group : ", sock.group);
             close(msg.fd);
             continue;
           }
@@ -154,7 +163,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
           queueMsg.lcp = sock.lcp;
           queueMsg.query = msg.data;
 
-          logger("Pushing message to concurrent queue for group : ",
+          logger("Server : Pushing message to concurrent queue for group : ",
                  sock.group);
 
           sockGroupData->second.queue.enqueue(queueMsg);
@@ -163,28 +172,30 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
           auto grp = groups.find(parsed.reg.group);
           string res;
           if (grp != groups.end()) {
-            logger("Group : ", grp->first, " already exists");
+            logger("Server : Group : ", grp->first, " already exists");
             res = "0";
           } else {
-            logger("Creating new group with ConcurrentQueue & eventFd : ",
-                   parsed.reg.group);
+            logger(
+                "Server : Creating new group with ConcurrentQueue & eventFd : ",
+                parsed.reg.group);
 
             groups.emplace(
                 parsed.reg.group,
                 GroupQueueEventFd{moodycamel::ConcurrentQueue<
                                       GroupConcurrentSyncQueueMessage>(),
                                   eventfd(0, EFD_NONBLOCK)});
-            logger("Created group : ", parsed.reg.group,
+            logger("Server : Created group : ", parsed.reg.group,
                    " starting its thread...");
 
             GroupQueueEventFd &groupData = groups[parsed.reg.group];
             std::thread grpThread(group, groupData.eventFd,
                                   std::ref(groupData.queue));
             grpThread.detach();
-            logger("Started thread for group");
+            logger("Server : Started thread for group");
             res = "1";
           }
 
+          logger("Server : Responding to LCP registration with : ", res);
           WriteSocketMessage response;
           response.fd = msg.fd;
           response.response = encoder(&res, "integer");
@@ -199,43 +210,45 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
           // for type : receiver
           //  Remove from current epoll monitoring
           //  Add to fd-group-lcp hashmap
-
           if (parsed.reg.type == configCommon::RECEIVER_CONNECTION_TYPE) {
-            logger("Adding to fdGroupLCPMap, fd : ", msg.fd);
+            logger("Server : Adding to fdGroupLCPMap, fd : ", msg.fd);
             FdGroupLCP fdData;
             fdData.group = parsed.reg.group;
             fdData.lcp = parsed.reg.lcp;
             fdGroupLCPMap[msg.fd] = fdData;
 
             // Remove from server thread epoll monitoring
-            logger("Removing from server thread epoll monitoring, fd : ",
-                   msg.fd);
+            logger(
+                "Server : Removing from server thread epoll monitoring, fd : ",
+                msg.fd);
             if (epoll_ctl(epollFd, EPOLL_CTL_DEL, msg.fd, nullptr) == -1) {
-              logger(
-                  "Error while removing from server thread monitoring, fd : ",
-                  msg.fd, " group : ", parsed.reg.group);
+              logger("Server : Error while removing from server thread "
+                     "monitoring, fd : ",
+                     msg.fd, " group : ", parsed.reg.group);
               perror("removing from monitoring error epoll_ctl");
-              logger("Closing connection for fd : ", msg.fd);
+              logger("Server : Closing connection for fd : ", msg.fd);
               close(msg.fd);
               continue;
             }
 
             // Push to Group ConcurrentQueue for registration
-            logger("Adding to ConcurrentQueue for registration, Group : ",
-                   parsed.reg.group, " fd : ", msg.fd);
+            logger(
+                "Server : Adding to ConcurrentQueue for registration, Group : ",
+                parsed.reg.group, " fd : ", msg.fd);
             GroupConcurrentSyncQueueMessage regMessage;
             regMessage.lcp = parsed.reg.lcp;
             regMessage.fd = msg.fd;
             regMessage.connectionRegistration = true;
             groups[parsed.reg.group].queue.enqueue(regMessage);
-            logger("Pushed fd : ", msg.fd,
+            logger("Server : Pushed fd : ", msg.fd,
                    " to ConcurrentQueue of Group : ", parsed.reg.group);
 
             groupEventFds[parsed.reg.group] = groups[parsed.reg.group].eventFd;
           } else {
-            logger(
-                "Queuing response for LCP connection registration of type : ",
-                configCommon::SENDER_CONNECTION_TYPE, " fd : ", msg.fd);
+            logger("Server : Queuing response for LCP connection "
+                   "registration "
+                   "to writeSocketQueue of type : ",
+                   configCommon::SENDER_CONNECTION_TYPE, " fd : ", msg.fd);
             string res = "1";
             WriteSocketMessage response;
             response.fd = msg.fd;
@@ -245,12 +258,18 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
 
         } else {
           // Push to operation queue
-          logger("Pushing to operation queue, op : ", parsed.operation);
+          logger("Server : Pushing to operation queue, op : ",
+                 parsed.operation);
           Operation op;
           op.fd = msg.fd;
           op.msg = parsed;
           operationQueue.push_back(op);
         }
+
+        // Re-queue for event loop to read this till EAGAIN
+        msg.data = "";
+        msg.readBytes = 0;
+        readSocketQueue.push_back(msg);
       }
     }
 
@@ -258,9 +277,9 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
     pos++;
   }
 
-  logger("Triggering group eventFds");
+  logger("Server : checking for triggering group eventFds");
   for (const auto &pair : groupEventFds) {
-    logger("Triggering eventFd for group : ", pair.first,
+    logger("Server : Triggering eventFd for group : ", pair.first,
            " eventFd : ", pair.second);
 
     uint64_t counter = 1;
@@ -279,9 +298,9 @@ void performOperation(std::deque<ReadSocketMessage> &readSocketQueue,
     // Perform operation
 
     WriteSocketMessage response;
-    logger("Performing operation");
+    logger("Server : Performing operation");
     Operation op = operationQueue.front();
-    logger("Op : ", op.msg.operation);
+    logger("Server : Op : ", op.msg.operation);
     operate(op, response, cache);
 
     // Send Response
@@ -299,8 +318,12 @@ void writeToSocketQueue(std::deque<WriteSocketMessage> &writeSocketQueue) {
   long pos = 0;
   long currentSize = writeSocketQueue.size();
 
+  logger("Server : writeSocketQueue");
+
   while (pos < currentSize) {
     WriteSocketMessage response = writeSocketQueue.front();
+    logger("Server : writeSocketQueue : fd : ", response.fd,
+           " response : ", response.response);
     write(response.fd, response.response.c_str(), response.response.length());
 
     writeSocketQueue.pop_front();
@@ -310,7 +333,7 @@ void writeToSocketQueue(std::deque<WriteSocketMessage> &writeSocketQueue) {
 
 void server(std::unordered_map<std::string, GroupQueueEventFd> &groups) {
   // Create
-  logger("Creating TCP server socket");
+  logger("Server : Creating TCP server socket");
   int socketFd = socket(AF_INET, SOCK_STREAM, 0);
   if (socketFd == -1) {
     perror("Error while creating server socket");
@@ -324,7 +347,7 @@ void server(std::unordered_map<std::string, GroupQueueEventFd> &groups) {
   add.sin_addr.s_addr = INADDR_ANY;
 
   int bindResult = bind(socketFd, (struct sockaddr *)&add, sizeof(add));
-  logger("bindResult : ", bindResult);
+  logger("Server : bindResult : ", bindResult);
   if (bindResult != 0) {
     perror("Error while binding to socket");
     exit(EXIT_FAILURE);
@@ -332,16 +355,16 @@ void server(std::unordered_map<std::string, GroupQueueEventFd> &groups) {
 
   int yes = 1;
   // TODO: Is this correct ? Understand this
-  logger("Making socket re-usable : ", socketFd);
+  logger("Server : Making socket re-usable : ", socketFd);
   if (setsockopt(socketFd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) < 0) {
     perror("setsockopt(SO_REUSEADDR) failed");
     exit(EXIT_FAILURE);
   }
 
   // Listen
-  logger("Starting listening on : ", socketFd);
+  logger("Server : Starting listening on : ", socketFd);
   int listenResult = listen(socketFd, configGCP::MAX_CONNECTIONS);
-  logger("listenResult : ", listenResult);
+  logger("Server : listenResult : ", listenResult);
   if (listenResult != 0) {
     perror("Error while listening on socket");
     exit(EXIT_FAILURE);
@@ -350,7 +373,7 @@ void server(std::unordered_map<std::string, GroupQueueEventFd> &groups) {
   // Accept (E-Poll)
   struct epoll_event ev, events[configGCP::MAX_CONNECTIONS];
 
-  logger("Making server socket non-blocking : ", socketFd);
+  logger("Server : Making server socket non-blocking : ", socketFd);
   if (makeSocketNonBlocking(socketFd)) {
     perror("fcntl socketFd");
     exit(EXIT_FAILURE);
@@ -403,6 +426,6 @@ void server(std::unordered_map<std::string, GroupQueueEventFd> &groups) {
       timeout = -1;
     }
 
-    logger("Waiting for epoll with timeout : ", timeout);
+    logger("Server : Waiting for epoll with timeout : ", timeout);
   }
 }
