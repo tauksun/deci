@@ -137,7 +137,6 @@ int connectionRegistration(int connSockFd, string type, string lcpId) {
     }
 
     logger("Registered LCP connection with GCP, response : ", response);
-    close(connSockFd);
   }
   return 0;
 }
