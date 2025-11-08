@@ -209,13 +209,10 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
           //
           // for type : receiver
           //  Remove from current epoll monitoring
+          //
+          //  for type : sender
           //  Add to fd-group-lcp hashmap
           if (parsed.reg.type == configCommon::RECEIVER_CONNECTION_TYPE) {
-            logger("Server : Adding to fdGroupLCPMap, fd : ", msg.fd);
-            FdGroupLCP fdData;
-            fdData.group = parsed.reg.group;
-            fdData.lcp = parsed.reg.lcp;
-            fdGroupLCPMap[msg.fd] = fdData;
 
             // Remove from server thread epoll monitoring
             logger(
@@ -245,6 +242,12 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
 
             groupEventFds[parsed.reg.group] = groups[parsed.reg.group].eventFd;
           } else {
+            logger("Server : Adding to fdGroupLCPMap, fd : ", msg.fd);
+            FdGroupLCP fdData;
+            fdData.group = parsed.reg.group;
+            fdData.lcp = parsed.reg.lcp;
+            fdGroupLCPMap[msg.fd] = fdData;
+
             logger("Server : Queuing response for LCP connection "
                    "registration "
                    "to writeSocketQueue of type : ",
@@ -340,6 +343,14 @@ void server(std::unordered_map<std::string, GroupQueueEventFd> &groups) {
     exit(EXIT_FAILURE);
   }
 
+  int yes = 1;
+  //// TODO: Is this correct ? Understand this
+  logger("Server : Making socket re-usable : ", socketFd);
+  if (setsockopt(socketFd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) < 0) {
+    perror("setsockopt(SO_REUSEADDR) failed");
+    exit(EXIT_FAILURE);
+  }
+
   // Bind
   struct sockaddr_in add;
   add.sin_family = AF_INET;
@@ -350,14 +361,6 @@ void server(std::unordered_map<std::string, GroupQueueEventFd> &groups) {
   logger("Server : bindResult : ", bindResult);
   if (bindResult != 0) {
     perror("Error while binding to socket");
-    exit(EXIT_FAILURE);
-  }
-
-  int yes = 1;
-  // TODO: Is this correct ? Understand this
-  logger("Server : Making socket re-usable : ", socketFd);
-  if (setsockopt(socketFd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) < 0) {
-    perror("setsockopt(SO_REUSEADDR) failed");
     exit(EXIT_FAILURE);
   }
 

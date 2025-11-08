@@ -50,6 +50,7 @@ void readFromSocketQueue(
     if (readBytes == 0) {
       // Connection closed by peer
       close(msg.fd);
+      continue;
     } else if (readBytes < 0) {
       logger("cacheSynchronization thread : readBytes < 0, for fd : ", msg.fd);
       if (errno == EAGAIN || errno == EWOULDBLOCK) {

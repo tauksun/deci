@@ -1,5 +1,6 @@
 #include "server.hpp"
 #include "../common/decoder.hpp"
+#include "../common/encoder.hpp"
 #include "../common/logger.hpp"
 #include "../common/makeSocketNonBlocking.hpp"
 #include "../common/operate.hpp"
@@ -156,8 +157,11 @@ void readFromSocketQueue(
                                  // is internal operation
             // Remove the sync flag from message to prevent recursive
             // synchronization
-            syncMessage.op = msg.data.substr(
-                0, msg.data.length() - 4); // subtract 4 bytes for :1\r\n
+            string noSyncFlag = "0";
+            syncMessage.op =
+                msg.data.substr(0, msg.data.length() - 4) +
+                encoder(&noSyncFlag,
+                        "integer"); // Replace sync flag with 0 (:0\r\n)
             logger("Server : syncMessage : ", syncMessage.op);
             GlobalCacheOpsQueue.enqueue(syncMessage);
             pushedToGlobalCacheOpsQueue = true;
@@ -271,6 +275,14 @@ void server(
     exit(EXIT_FAILURE);
   }
 
+  logger("Server : Making socket re-usable : ", socketFd);
+  // TODO: Is this correct ? Understand this
+  if (setsockopt(socketFd, SOL_SOCKET, SO_REUSEADDR, &configLCP::SOCKET_REUSE,
+                 sizeof(configLCP::SOCKET_REUSE)) < 0) {
+    perror("setsockopt(SO_REUSEADDR) failed");
+    exit(EXIT_FAILURE);
+  }
+
   // Bind
   struct sockaddr_un listener;
   listener.sun_family = AF_UNIX;
@@ -280,13 +292,6 @@ void server(
       bind(socketFd, (struct sockaddr *)&listener, sizeof(listener));
   if (bindResult != 0) {
     perror("Error while binding to socket");
-    exit(EXIT_FAILURE);
-  }
-
-  logger("Server : Making socket re-usable : ", socketFd);
-  if (setsockopt(socketFd, SOL_SOCKET, SO_REUSEADDR, &configLCP::SOCKET_REUSE,
-                 sizeof(configLCP::SOCKET_REUSE)) < 0) {
-    perror("setsockopt(SO_REUSEADDR) failed");
     exit(EXIT_FAILURE);
   }
 
