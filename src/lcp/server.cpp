@@ -276,7 +276,6 @@ void server(
   }
 
   logger("Server : Making socket re-usable : ", socketFd);
-  // TODO: Is this correct ? Understand this
   if (setsockopt(socketFd, SOL_SOCKET, SO_REUSEADDR, &configLCP::SOCKET_REUSE,
                  sizeof(configLCP::SOCKET_REUSE)) < 0) {
     perror("setsockopt(SO_REUSEADDR) failed");

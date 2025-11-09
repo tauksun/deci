@@ -31,8 +31,12 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
              struct epoll_event *events, int timeout,
              std::deque<ReadSocketMessage> &readSocketQueue) {
 
+  logger("Server : In epollIO");
   int readyFds =
       epoll_wait(epollFd, events, configGCP::MAX_CONNECTIONS, timeout);
+
+  logger("Server : Looping on readyFds : ", readyFds);
+
   if (readyFds == -1) {
     perror("epoll_wait error");
     exit(EXIT_FAILURE);
@@ -41,29 +45,42 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
   for (int n = 0; n < readyFds; ++n) {
     if (events[n].data.fd == socketFd) {
       logger("Server : Accepting client connection");
-      int connSock = accept(socketFd, NULL, NULL);
-      if (connSock == -1) {
-        perror("connSock accept");
-        // Don't throw error
-        continue;
-      }
 
-      logger("Server : Connection accepted : ", connSock);
-      logger("Server : Making connection non-blocking : ", connSock);
-      if (makeSocketNonBlocking(connSock)) {
-        perror("fcntl socketFd");
-        close(connSock);
-        continue;
-      }
+      while (true) {
+        logger("Server : In while loop > accepting connections");
+        int connSock = accept(socketFd, NULL, NULL);
+        if (connSock == -1) {
+          if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            // No more connections to accept
+            logger("Server : Read EAGAIN on socketFd : ", socketFd,
+                   " breaking from while");
+            break;
+          } else {
+            logger("Server : Error while accepting connection on socketFd : ",
+                   socketFd, " connSock : ", connSock);
+            perror("Server : accept");
+            continue;
+          }
+        }
 
-      ev.events = EPOLLIN | EPOLLET;
-      ev.data.fd = connSock;
+        logger("Server : Connection accepted : ", connSock);
+        logger("Server : Making connection non-blocking : ", connSock);
+        if (makeSocketNonBlocking(connSock)) {
+          perror("fcntl socketFd");
+          // TODO: Check if client connection needs to be  handled differently
+          close(connSock);
+          continue;
+        }
 
-      logger("Server : Adding connection : ", connSock,
-             " for monitoring by epoll");
-      if (epoll_ctl(epollFd, EPOLL_CTL_ADD, connSock, &ev) == -1) {
-        perror("epoll_ctl: connSock");
-        close(connSock);
+        ev.events = EPOLLIN | EPOLLET;
+        ev.data.fd = connSock;
+
+        logger("Server : Adding connection : ", connSock,
+               " for monitoring by epoll");
+        if (epoll_ctl(epollFd, EPOLL_CTL_ADD, connSock, &ev) == -1) {
+          perror("epoll_ctl: connSock");
+          close(connSock);
+        }
       }
     } else {
       // Add to readSocketQueue
@@ -86,6 +103,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
   // Read few bytes
   // If socket still has data, re-queue
 
+  logger("Server : In readFromSocketQueue");
   long pos = 0;
   long currentSize = readSocketQueue.size();
 
@@ -105,8 +123,11 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
       logger("Server : readBytes < 0, for fd : ", msg.fd);
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
         // No data now, skip
+        logger("Server : Received EAGAIN for fd : ", msg.fd);
       } else {
         // Other error, clean up
+        logger("Server : Error while reading, closing fd : ", msg.fd);
+        perror("Server : Error while reading from socket");
         close(msg.fd);
       }
     } else if (readBytes > 0) {
@@ -116,6 +137,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
 
     if (readBytes == configGCP::MAX_READ_BYTES) {
       // more data to read, Re-queue
+      logger("Server : Read max bytes > re-queuing, fd : ", msg.fd);
       readSocketQueue.push_back(msg);
     } else if (readBytes > 0) {
       // Parse the message here & push to operationQueue
@@ -133,6 +155,9 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
         writeSocketQueue.push_back(errorMessage);
 
         // Re-queue for event loop to read this till EAGAIN
+        logger(
+            "Server : Re-queue for event loop to read this till EAGAIN, fd : ",
+            msg.fd);
         msg.data = "";
         msg.readBytes = 0;
         readSocketQueue.push_back(msg);
@@ -270,6 +295,9 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
         }
 
         // Re-queue for event loop to read this till EAGAIN
+        logger(
+            "Server : Re-queue for event loop to read this till EAGAIN, fd : ",
+            msg.fd);
         msg.data = "";
         msg.readBytes = 0;
         readSocketQueue.push_back(msg);
@@ -297,6 +325,8 @@ void performOperation(std::deque<ReadSocketMessage> &readSocketQueue,
   long pos = 0;
   long currentSize = operationQueue.size();
 
+  logger("Server : In performOperation");
+
   while (pos < currentSize) {
     // Perform operation
 
@@ -321,14 +351,16 @@ void writeToSocketQueue(std::deque<WriteSocketMessage> &writeSocketQueue) {
   long pos = 0;
   long currentSize = writeSocketQueue.size();
 
-  logger("Server : writeSocketQueue");
+  logger("Server : In writeSocketQueue");
 
   while (pos < currentSize) {
     WriteSocketMessage response = writeSocketQueue.front();
     logger("Server : writeSocketQueue : fd : ", response.fd,
            " response : ", response.response);
-    write(response.fd, response.response.c_str(), response.response.length());
+    int writtenBytes = write(response.fd, response.response.c_str(),
+                             response.response.length());
 
+    logger("Server : writtenBytes : ", writtenBytes, " for fd : ", response.fd);
     writeSocketQueue.pop_front();
     pos++;
   }
@@ -344,7 +376,6 @@ void server(std::unordered_map<std::string, GroupQueueEventFd> &groups) {
   }
 
   int yes = 1;
-  //// TODO: Is this correct ? Understand this
   logger("Server : Making socket re-usable : ", socketFd);
   if (setsockopt(socketFd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) < 0) {
     perror("setsockopt(SO_REUSEADDR) failed");
@@ -404,6 +435,7 @@ void server(std::unordered_map<std::string, GroupQueueEventFd> &groups) {
   std::deque<WriteSocketMessage> writeSocketQueue;
   unordered_map<int, FdGroupLCP> FdGroupLCPMap;
 
+  logger("Server : Starting event loop");
   while (1) {
 
     /**

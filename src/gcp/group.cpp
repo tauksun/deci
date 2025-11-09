@@ -1,7 +1,7 @@
 #include "group.hpp"
 #include "../common/common.hpp"
-#include "../common/decoder.hpp"
 #include "../common/logger.hpp"
+#include "../common/responseDecoder.hpp"
 #include "config.hpp"
 #include <deque>
 #include <string>
@@ -64,8 +64,10 @@ void readFromSocketQueue(
       logger("Group : readBytes < 0, for fd : ", msg.fd);
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
         // No data now, skip
+        logger("Group : read EAGAIN for fd : ", msg.fd);
       } else {
         // Other error, clean up
+        logger("Group : Error while reading, closing fd : ", msg.fd);
         close(msg.fd);
       }
     } else if (readBytes > 0) {
@@ -78,14 +80,14 @@ void readFromSocketQueue(
       readSocketQueue.push_back(msg);
     } else if (readBytes > 0) {
       // Parse the message here & push to operationQueue
-      DecodedMessage parsed = decoder(msg.data);
+      DecodedResponse parsed = responseDecoder(msg.data);
       if (parsed.error.partial) {
         // If message is parsed partially, re-queue in readSocketQueue
         logger("Group : Partially parsed, re-queuing");
         logger("Group : TEMP : msg : ", msg.data, " readBytes : ", readBytes);
         readSocketQueue.push_back(msg);
       } else if (parsed.error.invalid) {
-        logger("Group : Invalid message : ", msg.data);
+        logger("Group : Invalid message : ", msg.data, " fd : ", msg.fd);
 
         // Re-queue for event loop to read this till EAGAIN
         msg.data = "";
@@ -123,6 +125,7 @@ void readFromGroupConcurrentSyncQueue(
     std::deque<WriteSocketMessage> &writeSocketQueue, int epollFd,
     struct epoll_event &ev, struct epoll_event *events) {
 
+  logger("Group : In readFromGroupConcurrentSyncQueue");
   for (;;) {
 
     GroupConcurrentSyncQueueMessage msg;
@@ -220,7 +223,7 @@ void writeToSocketSyncQueue(
   long pos = 0;
   long currentSize = writeSocketSyncQueue.size();
 
-  logger("Group : writeSocketQueue");
+  logger("Group : In writeSocketQueue");
   while (pos < currentSize) {
     WriteSocketSyncMessage msg = writeSocketSyncQueue.front();
     logger("Group : writeSocketQueue : fd : ", msg.fd, " msg : ", msg.query);
@@ -236,13 +239,13 @@ void gWriteToSocketQueue(std::deque<WriteSocketMessage> &writeSocketQueue) {
   long pos = 0;
   long currentSize = writeSocketQueue.size();
 
-  logger("Group : gWriteToSocketQueue");
+  logger("Group : In gWriteToSocketQueue");
 
   while (pos < currentSize) {
     WriteSocketMessage response = writeSocketQueue.front();
     logger("Group : gWriteSocketQueue : fd : ", response.fd,
            " response : ", response.response);
-    logger("Group :Responding to : ", response.fd,
+    logger("Group : Responding to : ", response.fd,
            " with : ", response.response);
     write(response.fd, response.response.c_str(), response.response.length());
 
@@ -287,6 +290,7 @@ int group(int eventFd,
     std::deque<WriteSocketMessage> writeSocketQueue;
     unordered_map<int, string> fdLCPMap;
 
+    logger("Group : Starting event loop");
     while (1) {
       if (gEpollIO(epollFd, eventFd, ev, events, timeout, readSocketQueue)) {
         return -1;
