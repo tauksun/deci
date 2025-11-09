@@ -22,6 +22,7 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
              std::deque<ReadSocketMessage> &readSocketQueue,
              int synchronizationEventFd) {
 
+  logger("Server : In epollIO");
   int readyFds =
       epoll_wait(epollFd, events, configLCP::MAXCONNECTIONS, timeout);
   if (readyFds == -1) {
@@ -29,32 +30,45 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
     exit(EXIT_FAILURE);
   }
 
+  logger("Server : Looping over readyFds : ", readyFds);
+
   for (int n = 0; n < readyFds; ++n) {
     if (events[n].data.fd == socketFd) {
-      logger("Server : Accepting client connection");
-      int connSock = accept(socketFd, NULL, NULL);
-      if (connSock == -1) {
-        perror("connSock accept");
-        // Don't throw error
-        continue;
-      }
+      while (true) {
+        logger("Server : Accepting client connection");
+        int connSock = accept(socketFd, NULL, NULL);
 
-      logger("Server : Connection accepted : ", connSock);
-      logger("Server : Making connection non-blocking : ", connSock);
-      if (makeSocketNonBlocking(connSock)) {
-        perror("fcntl socketFd");
-        close(connSock);
-        continue;
-      }
+        if (connSock == -1) {
+          if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            // No more connections to accept
+            logger("Server : Read EAGAIN on socketFd : ", socketFd,
+                   " breaking from while");
+            break;
+          } else {
+            logger("Server : Error while accepting connection on socketFd : ",
+                   socketFd, " connSock : ", connSock);
+            perror("Server : accept");
+            continue;
+          }
+        }
 
-      ev.events = EPOLLIN | EPOLLET;
-      ev.data.fd = connSock;
+        logger("Server : Connection accepted : ", connSock);
+        logger("Server : Making connection non-blocking : ", connSock);
+        if (makeSocketNonBlocking(connSock)) {
+          perror("fcntl socketFd");
+          close(connSock);
+          continue;
+        }
 
-      logger("Server : Adding connection : ", connSock,
-             " for monitoring by epoll");
-      if (epoll_ctl(epollFd, EPOLL_CTL_ADD, connSock, &ev) == -1) {
-        perror("epoll_ctl: connSock");
-        close(connSock);
+        ev.events = EPOLLIN | EPOLLET;
+        ev.data.fd = connSock;
+
+        logger("Server : Adding connection : ", connSock,
+               " for monitoring by epoll");
+        if (epoll_ctl(epollFd, EPOLL_CTL_ADD, connSock, &ev) == -1) {
+          perror("epoll_ctl: connSock");
+          close(connSock);
+        }
       }
     } else if (events[n].data.fd == synchronizationEventFd) {
       // Reading 1 Byte from eventFd (resets its counter)
