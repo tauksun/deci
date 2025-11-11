@@ -14,7 +14,7 @@ void epollIO(int epollFd, struct epoll_event *events,
              std::deque<ReadSocketMessage> &readSocketQueue, int timeout) {
 
   int readyFds =
-      epoll_wait(epollFd, events, configLCP::MAX_SYNC_CONNECTIONS, timeout);
+      epoll_wait(epollFd, events, configLCP.MAX_SYNC_CONNECTIONS, timeout);
 
   if (readyFds == -1) {
     perror("cacheSynchronization thread : epoll_wait error");
@@ -46,7 +46,7 @@ void readFromSocketQueue(
     char buf[1024];
     ReadSocketMessage msg = readSocketQueue.front();
 
-    int readBytes = read(msg.fd, buf, configLCP::MAX_READ_BYTES);
+    int readBytes = read(msg.fd, buf, configLCP.MAX_READ_BYTES);
     if (readBytes == 0) {
       // Connection closed by peer
       close(msg.fd);
@@ -64,7 +64,7 @@ void readFromSocketQueue(
       msg.data.append(buf, readBytes);
     }
 
-    if (readBytes == configLCP::MAX_READ_BYTES) {
+    if (readBytes == configLCP.MAX_READ_BYTES) {
       // more data to read, Re-queue
       readSocketQueue.push_back(msg);
     } else if (readBytes > 0) {
@@ -111,7 +111,7 @@ void cacheSynchronization(
     int synchronizationEventFd, string lcpId) {
 
   // Initialize epoll
-  struct epoll_event ev, events[configLCP::MAX_SYNC_CONNECTIONS];
+  struct epoll_event ev, events[configLCP.MAX_SYNC_CONNECTIONS];
 
   int epollFd = epoll_create1(0);
   if (epollFd == -1) {
@@ -120,9 +120,9 @@ void cacheSynchronization(
   }
 
   // Establish connections with GCP
-  for (int i = 0; i < configLCP::MAX_SYNC_CONNECTIONS; i++) {
-    int connSockFd = establishConnection(configLCP::GCP_SERVER_IP,
-                                         configLCP::GCP_SERVER_PORT);
+  for (int i = 0; i < configLCP.MAX_SYNC_CONNECTIONS; i++) {
+    int connSockFd = establishConnection(configLCP.GCP_SERVER_IP.c_str(),
+                                         configLCP.GCP_SERVER_PORT);
     if (connSockFd == -1) {
       perror("cacheSynchronization thread: Failed to establishConnection with "
              "GCP");

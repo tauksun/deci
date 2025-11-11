@@ -9,8 +9,8 @@ void health() {
   // Establish a connection with GCP
   //  & update health every n seconds
 
-  int connSockFd =
-      establishConnection(configLCP::GCP_SERVER_IP, configLCP::GCP_SERVER_PORT);
+  int connSockFd = establishConnection(configLCP.GCP_SERVER_IP.c_str(),
+                                       configLCP.GCP_SERVER_PORT);
 
   // Make fd non-blocking
   if (makeSocketNonBlocking(connSockFd)) {
@@ -24,6 +24,6 @@ void health() {
   while (1) {
     logger("Updating health, ms : ", ms);
     write(connSockFd, &ms, sizeof(ms));
-    sleep(configLCP::healthUpdateTime);
+    sleep(configLCP.healthUpdateTime);
   }
 }

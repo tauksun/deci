@@ -17,7 +17,7 @@ void epollIO(int epollFd, struct epoll_event *events,
              int globalCacheThreadEventFd) {
   logger("globalCacheOps thread : In epollIO");
   int readyFds =
-      epoll_wait(epollFd, events, configLCP::MAX_GCP_CONNECTIONS, timeout);
+      epoll_wait(epollFd, events, configLCP.MAX_GCP_CONNECTIONS, timeout);
 
   if (readyFds == -1) {
     perror("globalCacheOps thread : epoll_wait error");
@@ -61,7 +61,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
     char buf[1024];
     ReadSocketMessage msg = readSocketQueue.front();
 
-    int readBytes = read(msg.fd, buf, configLCP::MAX_READ_BYTES);
+    int readBytes = read(msg.fd, buf, configLCP.MAX_READ_BYTES);
     logger("globalCacheOps thread : Read ", readBytes,
            " bytes from fd : ", msg.fd);
     if (readBytes == 0) {
@@ -86,7 +86,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
       msg.data.append(buf, readBytes);
     }
 
-    if (readBytes == configLCP::MAX_READ_BYTES) {
+    if (readBytes == configLCP.MAX_READ_BYTES) {
       // more data to read, Re-queue
       readSocketQueue.push_back(msg);
     } else if (readBytes > 0) {
@@ -212,7 +212,7 @@ void globalCacheOps(
   std::deque<WriteSocketMessage> writeSocketQueue;
 
   // Initialize epoll & add globalCacheThreadEventFd for monitoring
-  struct epoll_event ev, events[configLCP::MAX_GCP_CONNECTIONS];
+  struct epoll_event ev, events[configLCP.MAX_GCP_CONNECTIONS];
 
   int epollFd = epoll_create1(0);
   if (epollFd == -1) {
@@ -231,10 +231,10 @@ void globalCacheOps(
   }
 
   // Establish connections with GCP
-  for (int i = 0; i < configLCP::MAX_GCP_CONNECTIONS; i++) {
+  for (int i = 0; i < configLCP.MAX_GCP_CONNECTIONS; i++) {
 
-    int connSockFd = establishConnection(configLCP::GCP_SERVER_IP,
-                                         configLCP::GCP_SERVER_PORT);
+    int connSockFd = establishConnection(configLCP.GCP_SERVER_IP.c_str(),
+                                         configLCP.GCP_SERVER_PORT);
 
     // Synchronously register connection
     if (connectionRegistration(connSockFd, configCommon::SENDER_CONNECTION_TYPE,

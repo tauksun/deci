@@ -17,6 +17,8 @@ int main() {
   string lcpId = generateRandomId();
   logger("Starting lcp : ", lcpId);
 
+  readConfig();
+
   logger("Intializing listening server");
 
   // Event fds for triggering peer threads
@@ -27,9 +29,9 @@ int main() {
   moodycamel::ConcurrentQueue<GlobalCacheOpMessage> GlobalCacheOpsQueue;
   moodycamel::ConcurrentQueue<Operation> SynchronizationQueue;
 
-  std::thread serverThread(server, configLCP::sock, ref(GlobalCacheOpsQueue),
-                           ref(SynchronizationQueue), globalCacheThreadEventFd,
-                           synchronizationEventFd);
+  std::thread serverThread(server, configLCP.sock.c_str(),
+                           ref(GlobalCacheOpsQueue), ref(SynchronizationQueue),
+                           globalCacheThreadEventFd, synchronizationEventFd);
 
   // Synchronously register with GCP
   lcpRegistration();

@@ -24,7 +24,7 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
 
   logger("Server : In epollIO");
   int readyFds =
-      epoll_wait(epollFd, events, configLCP::MAXCONNECTIONS, timeout);
+      epoll_wait(epollFd, events, configLCP.MAX_CONNECTIONS, timeout);
   if (readyFds == -1) {
     perror("epoll_wait error");
     exit(EXIT_FAILURE);
@@ -105,7 +105,7 @@ void readFromSocketQueue(
     char buf[1024];
     ReadSocketMessage msg = readSocketQueue.front();
 
-    int readBytes = read(msg.fd, buf, configLCP::MAX_READ_BYTES);
+    int readBytes = read(msg.fd, buf, configLCP.MAX_READ_BYTES);
     if (readBytes == 0) {
       // Connection closed by peer
       close(msg.fd);
@@ -126,7 +126,7 @@ void readFromSocketQueue(
       msg.data.append(buf, readBytes);
     }
 
-    if (readBytes == configLCP::MAX_READ_BYTES) {
+    if (readBytes == configLCP.MAX_READ_BYTES) {
       // more data to read, Re-queue
       readSocketQueue.push_back(msg);
     } else if (readBytes > 0) {
@@ -138,9 +138,10 @@ void readFromSocketQueue(
         readSocketQueue.push_back(msg);
       } else if (parsed.error.invalid) {
         logger("Server : Invalid message : ", msg.data);
+        string res = "Invalid Message";
         WriteSocketMessage errorMessage;
         errorMessage.fd = msg.fd;
-        errorMessage.response = configLCP::INVALID_MESSAGE;
+        errorMessage.response = encoder(&res, "error");
         writeSocketQueue.push_back(errorMessage);
 
         // Re-queue for event loop to read this till EAGAIN
@@ -260,7 +261,7 @@ void readFromSynchronizationQueue(
 
   logger("Server : In readFromSynchronizationQueue");
   unsigned long queueSize = SynchronizationQueue.size_approx();
-  for (int i = 0; i < min(queueSize, configLCP::MAX_SYNC_MESSAGES); i++) {
+  for (int i = 0; i < min(queueSize, configLCP.MAX_SYNC_MESSAGES); i++) {
     WriteSocketMessage response;
     Operation msg;
     bool found = SynchronizationQueue.try_dequeue(msg);
@@ -290,8 +291,8 @@ void server(
   }
 
   logger("Server : Making socket re-usable : ", socketFd);
-  if (setsockopt(socketFd, SOL_SOCKET, SO_REUSEADDR, &configLCP::SOCKET_REUSE,
-                 sizeof(configLCP::SOCKET_REUSE)) < 0) {
+  if (setsockopt(socketFd, SOL_SOCKET, SO_REUSEADDR, &configLCP.SOCKET_REUSE,
+                 sizeof(configLCP.SOCKET_REUSE)) < 0) {
     perror("setsockopt(SO_REUSEADDR) failed");
     exit(EXIT_FAILURE);
   }
@@ -310,14 +311,14 @@ void server(
 
   // Listen
   logger("Server : Starting listening on : ", socketFd);
-  int listenResult = listen(socketFd, configLCP::MAXCONNECTIONS);
+  int listenResult = listen(socketFd, configLCP.MAX_CONNECTIONS);
   if (listenResult != 0) {
     perror("Error while listening on socket");
     exit(EXIT_FAILURE);
   }
 
   // Accept (E-Poll)
-  struct epoll_event ev, events[configLCP::MAXCONNECTIONS];
+  struct epoll_event ev, events[configLCP.MAX_CONNECTIONS];
 
   logger("Server : Making server socket non-blocking : ", socketFd);
   if (makeSocketNonBlocking(socketFd)) {

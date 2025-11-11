@@ -12,8 +12,8 @@ int lcpRegistration() {
 
   logger("Staring LCP Registration...");
 
-  int regSock =
-      establishConnection(configLCP::GCP_SERVER_IP, configLCP::GCP_SERVER_PORT);
+  int regSock = establishConnection(configLCP.GCP_SERVER_IP.c_str(),
+                                    configLCP.GCP_SERVER_PORT);
   if (regSock == -1) {
     perror("Cannot establish connection with GCP for registration");
     exit(EXIT_FAILURE);
@@ -30,7 +30,7 @@ int lcpRegistration() {
   registration.push_back(reg);
 
   QueryArrayElement group;
-  group.value = configLCP::GROUP;
+  group.value = configLCP.GROUP;
   group.type = "string";
   registration.push_back(group);
 
@@ -87,7 +87,7 @@ int connectionRegistration(int connSockFd, string type, string lcpId) {
   registration.push_back(reg);
 
   QueryArrayElement group;
-  group.value = configLCP::GROUP;
+  group.value = configLCP.GROUP;
   group.type = "string";
   registration.push_back(group);
 
