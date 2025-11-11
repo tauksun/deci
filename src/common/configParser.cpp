@@ -113,7 +113,7 @@ void createConfig(I_CONFIG &configuration) {
   };
 
   unordered_map<string, function<void(const string &)>> gcp_setters = {
-      {"MAXCONNECTIONS",
+      {"MAX_CONNECTIONS",
        [&](const string &val) {
          (*configuration.gcp_config).MAX_CONNECTIONS = stoi(val);
        }},

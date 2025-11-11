@@ -33,7 +33,7 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
 
   logger("Server : In epollIO");
   int readyFds =
-      epoll_wait(epollFd, events, configGCP::MAX_CONNECTIONS, timeout);
+      epoll_wait(epollFd, events, configGCP.MAX_CONNECTIONS, timeout);
 
   logger("Server : Looping on readyFds : ", readyFds);
 
@@ -114,7 +114,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
     char buf[1024];
     ReadSocketMessage msg = readSocketQueue.front();
 
-    int readBytes = read(msg.fd, buf, configGCP::MAX_READ_BYTES);
+    int readBytes = read(msg.fd, buf, configGCP.MAX_READ_BYTES);
     if (readBytes == 0) {
       // Connection closed by peer
       close(msg.fd);
@@ -135,7 +135,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
       msg.data.append(buf, readBytes);
     }
 
-    if (readBytes == configGCP::MAX_READ_BYTES) {
+    if (readBytes == configGCP.MAX_READ_BYTES) {
       // more data to read, Re-queue
       logger("Server : Read max bytes > re-queuing, fd : ", msg.fd);
       readSocketQueue.push_back(msg);
@@ -149,9 +149,10 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
         readSocketQueue.push_back(msg);
       } else if (parsed.error.invalid) {
         logger("Server : Invalid message : ", msg.data);
+        string res = "Invalid Message";
         WriteSocketMessage errorMessage;
         errorMessage.fd = msg.fd;
-        errorMessage.response = configGCP::INVALID_MESSAGE;
+        errorMessage.response = encoder(&res, "error");
         writeSocketQueue.push_back(errorMessage);
 
         // Re-queue for event loop to read this till EAGAIN
@@ -385,7 +386,7 @@ void server(std::unordered_map<std::string, GroupQueueEventFd> &groups) {
   // Bind
   struct sockaddr_in add;
   add.sin_family = AF_INET;
-  add.sin_port = htons(configGCP::SERVER_PORT);
+  add.sin_port = htons(configGCP.SERVER_PORT);
   add.sin_addr.s_addr = INADDR_ANY;
 
   int bindResult = bind(socketFd, (struct sockaddr *)&add, sizeof(add));
@@ -397,7 +398,7 @@ void server(std::unordered_map<std::string, GroupQueueEventFd> &groups) {
 
   // Listen
   logger("Server : Starting listening on : ", socketFd);
-  int listenResult = listen(socketFd, configGCP::MAX_CONNECTIONS);
+  int listenResult = listen(socketFd, configGCP.MAX_CONNECTIONS);
   logger("Server : listenResult : ", listenResult);
   if (listenResult != 0) {
     perror("Error while listening on socket");
@@ -405,7 +406,7 @@ void server(std::unordered_map<std::string, GroupQueueEventFd> &groups) {
   }
 
   // Accept (E-Poll)
-  struct epoll_event ev, events[configGCP::MAX_CONNECTIONS];
+  struct epoll_event ev, events[configGCP.MAX_CONNECTIONS];
 
   logger("Server : Making server socket non-blocking : ", socketFd);
   if (makeSocketNonBlocking(socketFd)) {

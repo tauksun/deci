@@ -1,5 +1,6 @@
 #include "gcp.hpp"
 #include "../common/logger.hpp"
+#include "config.hpp"
 #include "health.hpp"
 #include "server.hpp"
 #include <thread>
@@ -8,6 +9,7 @@
 int main() {
   initializeLogger();
   logger("Starting GCP");
+  readConfig();
 
   std::unordered_map<std::string, GroupQueueEventFd> groups;
 

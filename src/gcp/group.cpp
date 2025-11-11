@@ -14,7 +14,7 @@ int gEpollIO(int epollFd, int eventFd, struct epoll_event &ev,
              std::deque<ReadSocketMessage> &readSocketQueue) {
 
   int readyFds =
-      epoll_wait(epollFd, events, configGCP::MAX_CONNECTIONS, timeout);
+      epoll_wait(epollFd, events, configGCP.MAX_CONNECTIONS, timeout);
   if (readyFds == -1) {
     perror("epoll_wait error");
     return -1;
@@ -55,7 +55,7 @@ void readFromSocketQueue(
     char buf[1024];
     ReadSocketMessage msg = readSocketQueue.front();
 
-    int readBytes = read(msg.fd, buf, configGCP::MAX_READ_BYTES);
+    int readBytes = read(msg.fd, buf, configGCP.MAX_READ_BYTES);
     if (readBytes == 0) {
       // Connection closed by peer
       close(msg.fd);
@@ -75,7 +75,7 @@ void readFromSocketQueue(
       msg.data.append(buf, readBytes);
     }
 
-    if (readBytes == configGCP::MAX_READ_BYTES) {
+    if (readBytes == configGCP.MAX_READ_BYTES) {
       // more data to read, Re-queue
       readSocketQueue.push_back(msg);
     } else if (readBytes > 0) {
@@ -262,8 +262,8 @@ int group(int eventFd,
     std::unordered_map<std::string, std::deque<int>> lcpQueueMap;
 
     // Maximum connections of all LCP combined in a group will be less than or
-    // equal (if only single group is present) to configGCP::MAX_CONNECTIONS
-    struct epoll_event ev, events[configGCP::MAX_CONNECTIONS];
+    // equal (if only single group is present) to configGCP.MAX_CONNECTIONS
+    struct epoll_event ev, events[configGCP.MAX_CONNECTIONS];
 
     logger("Group : Creating epoll for group");
     int epollFd = epoll_create1(0);
