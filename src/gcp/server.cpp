@@ -358,8 +358,31 @@ void writeToSocketQueue(std::deque<WriteSocketMessage> &writeSocketQueue) {
     WriteSocketMessage response = writeSocketQueue.front();
     logger("Server : writeSocketQueue : fd : ", response.fd,
            " response : ", response.response);
-    int writtenBytes = write(response.fd, response.response.c_str(),
-                             response.response.length());
+
+    int responseLength = response.response.length();
+    int writtenBytes =
+        write(response.fd, response.response.c_str(), responseLength);
+
+    if (writtenBytes < 0) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        // Try again later, re-queue the whole message
+        logger("Server : Got EAGAIN while writing to fd : ", response.fd,
+               " requeuing");
+        writeSocketQueue.push_back(response);
+      } else {
+        logger("Server : Fatal write error, closing connection for fd: ",
+               response.fd);
+        close(response.fd);
+      }
+    } else if (writtenBytes == 0) {
+      logger("Server : Write returned zero (connection closed?), fd: ",
+             response.fd);
+      close(response.fd);
+    } else if (writtenBytes < responseLength) {
+      logger("Server : Partial write, requeuing for fd : ", response.fd);
+      response.response = response.response.substr(writtenBytes);
+      writeSocketQueue.push_back(response);
+    }
 
     logger("Server : writtenBytes : ", writtenBytes, " for fd : ", response.fd);
     writeSocketQueue.pop_front();

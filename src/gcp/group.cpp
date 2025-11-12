@@ -227,7 +227,28 @@ void writeToSocketSyncQueue(
   while (pos < currentSize) {
     WriteSocketSyncMessage msg = writeSocketSyncQueue.front();
     logger("Group : writeSocketQueue : fd : ", msg.fd, " msg : ", msg.query);
-    write(msg.fd, msg.query.c_str(), msg.query.length());
+    int msgLength = msg.query.length();
+    int writtenBytes = write(msg.fd, msg.query.c_str(), msgLength);
+
+    if (writtenBytes < 0) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        // Try again later, re-queue the whole message
+        logger("Group : Got EAGAIN while writing to fd : ", msg.fd,
+               " requeuing");
+        writeSocketSyncQueue.push_back(msg);
+      } else {
+        logger("Group : Fatal write error, closing connection for fd: ",
+               msg.fd);
+        close(msg.fd);
+      }
+    } else if (writtenBytes == 0) {
+      logger("Group : Write returned zero (connection closed?), fd: ", msg.fd);
+      close(msg.fd);
+    } else if (writtenBytes < msgLength) {
+      logger("Group : Partial write, requeuing for fd : ", msg.fd);
+      msg.query = msg.query.substr(writtenBytes);
+      writeSocketSyncQueue.push_back(msg);
+    }
 
     writeSocketSyncQueue.pop_front();
     pos++;
@@ -245,9 +266,30 @@ void gWriteToSocketQueue(std::deque<WriteSocketMessage> &writeSocketQueue) {
     WriteSocketMessage response = writeSocketQueue.front();
     logger("Group : gWriteSocketQueue : fd : ", response.fd,
            " response : ", response.response);
-    logger("Group : Responding to : ", response.fd,
-           " with : ", response.response);
-    write(response.fd, response.response.c_str(), response.response.length());
+    int responseLength = response.response.length();
+    int writtenBytes =
+        write(response.fd, response.response.c_str(), responseLength);
+
+    if (writtenBytes < 0) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        // Try again later, re-queue the whole message
+        logger("Group : Got EAGAIN while writing to fd : ", response.fd,
+               " requeuing");
+        writeSocketQueue.push_back(response);
+      } else {
+        logger("Group : Fatal write error, closing connection for fd: ",
+               response.fd);
+        close(response.fd);
+      }
+    } else if (writtenBytes == 0) {
+      logger("Group : Write returned zero (connection closed?), fd: ",
+             response.fd);
+      close(response.fd);
+    } else if (writtenBytes < responseLength) {
+      logger("Group : Partial write, requeuing for fd : ", response.fd);
+      response.response = response.response.substr(writtenBytes);
+      writeSocketQueue.push_back(response);
+    }
 
     writeSocketQueue.pop_front();
     pos++;

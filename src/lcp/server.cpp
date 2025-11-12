@@ -101,6 +101,7 @@ void readFromSocketQueue(
   long currentSize = readSocketQueue.size();
   bool pushedToGlobalCacheOpsQueue = false;
 
+  logger("Server : In readFromSocketQueue");
   while (pos < currentSize) {
     char buf[1024];
     ReadSocketMessage msg = readSocketQueue.front();
@@ -236,7 +237,8 @@ void performOperation(std::deque<ReadSocketMessage> &readSocketQueue,
 }
 
 void writeToSocketQueue(std::deque<WriteSocketMessage> &writeSocketQueue) {
-  // Write few bytes & keep writing till whole content is written
+  // Write few bytes & keep writing till whole content is written in further
+  // iterations
 
   long pos = 0;
   long currentSize = writeSocketQueue.size();
@@ -247,7 +249,30 @@ void writeToSocketQueue(std::deque<WriteSocketMessage> &writeSocketQueue) {
     WriteSocketMessage response = writeSocketQueue.front();
     logger("Server : sending response to fd : ", response.fd,
            " response : ", response.response);
-    write(response.fd, response.response.c_str(), response.response.length());
+    int responseLength = response.response.length();
+    int writtenBytes =
+        write(response.fd, response.response.c_str(), responseLength);
+
+    if (writtenBytes < 0) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        // Try again later, re-queue the whole message
+        logger("Server : Got EAGAIN while writing to fd : ", response.fd,
+               " requeuing");
+        writeSocketQueue.push_back(response);
+      } else {
+        logger("Server : Fatal write error, closing connection for fd: ",
+               response.fd);
+        close(response.fd);
+      }
+    } else if (writtenBytes == 0) {
+      logger("Server : Write returned zero (connection closed?), fd: ",
+             response.fd);
+      close(response.fd);
+    } else if (writtenBytes < responseLength) {
+      logger("Server : Partial write, requeuing for fd : ", response.fd);
+      response.response = response.response.substr(writtenBytes);
+      writeSocketQueue.push_back(response);
+    }
 
     writeSocketQueue.pop_front();
     pos++;

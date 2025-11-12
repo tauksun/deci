@@ -146,12 +146,41 @@ void writeToApplicationSocket(
 
   long pos = 0;
   long currentSize = writeSocketQueue.size();
+
   logger("globalCacheOps thread : In writeToApplicationSocket");
+
   while (pos < currentSize) {
     WriteSocketMessage response = writeSocketQueue.front();
     logger("globalCacheOps thread : Writing to fd : ", response.fd,
            " response : ", response.response);
-    write(response.fd, response.response.c_str(), response.response.length());
+
+    int responseLength = response.response.length();
+    int writtenBytes =
+        write(response.fd, response.response.c_str(), responseLength);
+
+    if (writtenBytes < 0) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        // Try again later, re-queue the whole message
+        logger("globalCacheOps thread : Got EAGAIN while writing to fd : ",
+               response.fd, " requeuing");
+        writeSocketQueue.push_back(response);
+      } else {
+        logger("globalCacheOps thread : Fatal write error, closing connection "
+               "for fd: ",
+               response.fd);
+        close(response.fd);
+      }
+    } else if (writtenBytes == 0) {
+      logger("globalCacheOps thread : Write returned zero (connection "
+             "closed?), fd: ",
+             response.fd);
+      close(response.fd);
+    } else if (writtenBytes < responseLength) {
+      logger("globalCacheOps thread : Partial write, requeuing for fd : ",
+             response.fd);
+      response.response = response.response.substr(writtenBytes);
+      writeSocketQueue.push_back(response);
+    }
 
     writeSocketQueue.pop_front();
     pos++;
@@ -163,17 +192,9 @@ void readFromConcurrentQueue(
     std::deque<int> &connectionPool, unordered_map<int, int> &socketReqResMap) {
 
   logger("globalCacheOps thread : In readFromConcurrentQueue");
+
   // check connectionPool > if available : send query to GCP
   for (int i = 0;; i++) {
-    int isConnectionAvailable = connectionPool.size();
-    if (!isConnectionAvailable) {
-      logger("globalCacheOps thread : connection pool is empty");
-      break;
-    }
-
-    logger("globalCacheOps thread : Connection pool has : ",
-           isConnectionAvailable, " connections");
-
     GlobalCacheOpMessage msg;
     bool found = GlobalCacheOpsQueue.try_dequeue(msg);
     if (!found) {
@@ -181,12 +202,73 @@ void readFromConcurrentQueue(
       break;
     }
 
-    // Write to a socket connection from connectionPool
-    int connSock = connectionPool.front();
-    logger("globalCacheOps thread : Retrieved connection from pool, fd : ",
-           connSock);
+    if (!msg.partial) {
+      logger("globalCacheOps thread : msg is new, checking for connectionPool "
+             "availability");
+      int isConnectionAvailable = connectionPool.size();
+      if (!isConnectionAvailable) {
+        logger("globalCacheOps thread : connection pool is empty");
+        logger("globalCacheOps thread : Re-queuing the extracted message");
+        GlobalCacheOpsQueue.enqueue(msg);
+        break;
+      }
 
-    write(connSock, msg.op.c_str(), msg.op.length());
+      logger("globalCacheOps thread : Connection pool has : ",
+             isConnectionAvailable, " connections");
+    }
+
+    // Write to a socket connection from connectionPool
+    int connSock;
+    bool extractedFromConnectionPool = false;
+    if (msg.partial) {
+      // Use already used connection to send more data
+      logger("globalCacheOps thread : Using existing connection for partial "
+             "msg, connSock : ",
+             connSock);
+      connSock = msg.connSock;
+    } else {
+      // Fetch a new connection
+      logger("globalCacheOps thread : Extracting new connection from pool");
+      connSock = connectionPool.front();
+      logger("globalCacheOps thread : Extracted new connection from pool, "
+             "connSock : ",
+             connSock);
+      extractedFromConnectionPool = true;
+    }
+
+    int msgLength = msg.op.length();
+    int writtenBytes = write(connSock, msg.op.c_str(), msgLength);
+
+    if (writtenBytes < 0) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        // Try again later, re-queue the message
+        logger(
+            "globalCacheOps thread : Got EAGAIN while writing to connSock : ",
+            connSock, " requeuing");
+        msg.partial = true;
+        msg.connSock = connSock;
+        GlobalCacheOpsQueue.enqueue(msg);
+      } else {
+        logger("globalCacheOps thread : Fatal write error, closing connection "
+               "for connSock : ",
+               connSock);
+        close(connSock);
+        continue;
+      }
+    } else if (writtenBytes == 0) {
+      logger("globalCacheOps thread : Write returned zero (connection "
+             "closed), connSock : ",
+             connSock);
+      close(connSock);
+      continue;
+    } else if (writtenBytes < msgLength) {
+      logger("globalCacheOps thread : Partial write, requeuing for connSock : ",
+             connSock);
+      msg.op = msg.op.substr(writtenBytes);
+      msg.partial = true;
+      msg.connSock = connSock;
+      GlobalCacheOpsQueue.enqueue(msg);
+    }
 
     // Add in socketReqResMap for application queries
     if (msg.fd != -1) {
@@ -196,8 +278,12 @@ void readFromConcurrentQueue(
       socketReqResMap[connSock] = msg.fd;
     }
 
-    logger("globalCacheOps thread : Poping from connection pool");
-    connectionPool.pop_front();
+    logger("globalCacheOps thread : extractedFromConnectionPool : ",
+           extractedFromConnectionPool);
+    if (extractedFromConnectionPool) {
+      logger("globalCacheOps thread : Poping from connection pool");
+      connectionPool.pop_front();
+    }
   }
 }
 

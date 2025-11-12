@@ -312,6 +312,9 @@ DecodedMessage decoder(string &str) {
     msg.reg.group = str.substr(offset, groupLength);
     count++;
     offset += groupLength + 2;
+  } else {
+    msg.error.invalid = true;
+    return msg;
   }
 
   if (count < numberOfElements) {
