@@ -204,18 +204,18 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
             logger(
                 "Server : Creating new group with ConcurrentQueue & eventFd : ",
                 parsed.reg.group);
-
+            string groupName = parsed.reg.group;
             groups.emplace(
-                parsed.reg.group,
+                groupName,
                 GroupQueueEventFd{moodycamel::ConcurrentQueue<
                                       GroupConcurrentSyncQueueMessage>(),
                                   eventfd(0, EFD_NONBLOCK)});
-            logger("Server : Created group : ", parsed.reg.group,
+            logger("Server : Created group : ", groupName,
                    " starting its thread...");
 
-            GroupQueueEventFd &groupData = groups[parsed.reg.group];
+            GroupQueueEventFd &groupData = groups[groupName];
             std::thread grpThread(group, groupData.eventFd,
-                                  std::ref(groupData.queue));
+                                  std::ref(groupData.queue), groupName);
             grpThread.detach();
             logger("Server : Started thread for group");
             res = "1";

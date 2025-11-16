@@ -2,10 +2,16 @@
 #include "../common/common.hpp"
 #include "../common/logger.hpp"
 #include "../common/responseDecoder.hpp"
+#include "../common/wal.hpp"
 #include "config.hpp"
+#include "wal.hpp"
 #include <deque>
+#include <fstream>
+#include <ios>
 #include <string>
 #include <sys/epoll.h>
+#include <sys/eventfd.h>
+#include <thread>
 #include <unistd.h>
 #include <unordered_map>
 
@@ -297,9 +303,29 @@ void gWriteToSocketQueue(std::deque<WriteSocketMessage> &writeSocketQueue) {
 }
 
 int group(int eventFd,
-          moodycamel::ConcurrentQueue<GroupConcurrentSyncQueueMessage> &queue) {
+          moodycamel::ConcurrentQueue<GroupConcurrentSyncQueueMessage> &queue,
+          string groupName) {
   try {
-    logger("Group thread started");
+    logger("Group : ", groupName, " thread started");
+
+    string groupWalFile = generateWalFileName(groupName);
+    logger("Group : Opening WAL file : ", groupWalFile);
+    fstream wal(groupWalFile, ios::app);
+    if (!wal.is_open()) {
+      logger("Group : Error while opening WAL file for group : ", groupName);
+      exit(EXIT_FAILURE);
+    }
+
+    logger("Group : Successfully opened wal file : ", groupWalFile,
+           " in append mode");
+    moodycamel::ConcurrentQueue<string> walQueue;
+    int eventFd = eventfd(0, EFD_NONBLOCK);
+
+    logger("Group : Starting WAL writer thread for group : ", groupName,
+           " eventFd : ", eventFd);
+    thread writer(walWriter, std::ref(wal), groupName, std::ref(walQueue),
+                  eventFd);
+    writer.detach();
 
     std::unordered_map<std::string, std::deque<int>> lcpQueueMap;
 

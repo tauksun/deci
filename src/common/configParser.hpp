@@ -24,6 +24,7 @@ struct GCP_CONFIG {
   int MAX_READ_BYTES = 1023;
   int MAX_WRITE_BYTES = 1023;
   int SERVER_PORT = 7480;
+  int WAL_EPOLL_CONNECTIONS = 1;
 };
 
 struct I_CONFIG {
