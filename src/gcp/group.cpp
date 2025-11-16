@@ -15,14 +15,22 @@
 #include <unistd.h>
 #include <unordered_map>
 
+void triggerEventfd(int walEventFd) {
+  logger("Group : triggering walEventFd");
+  uint64_t counter = 1;
+  write(walEventFd, &counter, sizeof(counter));
+  logger("Group : walEventFd counter : ", counter);
+}
+
 int gEpollIO(int epollFd, int eventFd, struct epoll_event &ev,
              struct epoll_event *events, int timeout,
              std::deque<ReadSocketMessage> &readSocketQueue) {
 
+  logger("Group : In gEpollIO");
   int readyFds =
       epoll_wait(epollFd, events, configGCP.MAX_CONNECTIONS, timeout);
   if (readyFds == -1) {
-    perror("epoll_wait error");
+    perror("Group : epoll_wait error");
     return -1;
   }
 
@@ -129,9 +137,13 @@ void readFromGroupConcurrentSyncQueue(
     std::unordered_map<int, std::string> &fdLCPMap,
     std::deque<WriteSocketSyncMessage> &writeSocketSyncQueue,
     std::deque<WriteSocketMessage> &writeSocketQueue, int epollFd,
-    struct epoll_event &ev, struct epoll_event *events) {
+    struct epoll_event &ev, struct epoll_event *events,
+    moodycamel::ConcurrentQueue<string> &walQueue, int walEventFd) {
 
   logger("Group : In readFromGroupConcurrentSyncQueue");
+
+  bool isDataPushedToWALQueue = false;
+
   for (;;) {
 
     GroupConcurrentSyncQueueMessage msg;
@@ -187,6 +199,10 @@ void readFromGroupConcurrentSyncQueue(
       writeSocketQueue.push_back(response);
     } else {
       // Send sync message to other LCPs
+      logger("Group : Sending sync op in wal queue");
+      walQueue.enqueue(msg.query);
+      isDataPushedToWALQueue = true;
+
       logger("Group : Sending sync op to other lcps for producer lcp : ",
              msg.lcp);
       for (auto &pair : lcpQueueMap) {
@@ -219,6 +235,10 @@ void readFromGroupConcurrentSyncQueue(
       response.response = ":1\r\n";
       writeSocketQueue.push_back(response);
     }
+  }
+  // Trigger WAL eventFd
+  if (isDataPushedToWALQueue) {
+    triggerEventfd(walEventFd);
   }
 }
 
@@ -310,7 +330,7 @@ int group(int eventFd,
 
     string groupWalFile = generateWalFileName(groupName);
     logger("Group : Opening WAL file : ", groupWalFile);
-    fstream wal(groupWalFile, ios::app);
+    fstream wal(groupWalFile, ios::app | ios::out);
     if (!wal.is_open()) {
       logger("Group : Error while opening WAL file for group : ", groupName);
       exit(EXIT_FAILURE);
@@ -319,12 +339,12 @@ int group(int eventFd,
     logger("Group : Successfully opened wal file : ", groupWalFile,
            " in append mode");
     moodycamel::ConcurrentQueue<string> walQueue;
-    int eventFd = eventfd(0, EFD_NONBLOCK);
+    int walEventFd = eventfd(0, EFD_NONBLOCK);
 
     logger("Group : Starting WAL writer thread for group : ", groupName,
            " eventFd : ", eventFd);
     thread writer(walWriter, std::ref(wal), groupName, std::ref(walQueue),
-                  eventFd);
+                  walEventFd);
     writer.detach();
 
     std::unordered_map<std::string, std::deque<int>> lcpQueueMap;
@@ -336,7 +356,7 @@ int group(int eventFd,
     logger("Group : Creating epoll for group");
     int epollFd = epoll_create1(0);
     if (epollFd == -1) {
-      perror("epoll create error");
+      perror("Group : epoll create error");
       // Don't throw error here as other groups could still be running
       return -1;
     }
@@ -348,7 +368,7 @@ int group(int eventFd,
     ev.data.fd = eventFd;
 
     if (epoll_ctl(epollFd, EPOLL_CTL_ADD, eventFd, &ev) == -1) {
-      perror("group epoll_ctl eventFd");
+      perror("Group : epoll_ctl eventFd");
       return -1;
     }
 
@@ -365,9 +385,9 @@ int group(int eventFd,
       }
 
       readFromSocketQueue(readSocketQueue, lcpQueueMap, fdLCPMap);
-      readFromGroupConcurrentSyncQueue(queue, lcpQueueMap, fdLCPMap,
-                                       writeSocketSyncQueue, writeSocketQueue,
-                                       epollFd, ev, events);
+      readFromGroupConcurrentSyncQueue(
+          queue, lcpQueueMap, fdLCPMap, writeSocketSyncQueue, writeSocketQueue,
+          epollFd, ev, events, walQueue, walEventFd);
       writeToSocketSyncQueue(writeSocketSyncQueue);
       gWriteToSocketQueue(writeSocketQueue);
 

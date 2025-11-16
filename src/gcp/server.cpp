@@ -38,7 +38,7 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
   logger("Server : Looping on readyFds : ", readyFds);
 
   if (readyFds == -1) {
-    perror("epoll_wait error");
+    perror("Server : epoll_wait error");
     exit(EXIT_FAILURE);
   }
 
@@ -439,7 +439,7 @@ void server(std::unordered_map<std::string, GroupQueueEventFd> &groups) {
 
   int epollFd = epoll_create1(0);
   if (epollFd == -1) {
-    perror("epoll create error");
+    perror("Server : epoll create error");
     exit(EXIT_FAILURE);
   }
 

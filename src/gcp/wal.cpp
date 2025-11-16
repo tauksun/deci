@@ -11,6 +11,7 @@
 int walEpollIO(int epollFd, int eventFd, struct epoll_event &ev,
                struct epoll_event *events, int timeout) {
 
+  logger("WAL thead : In walEpollIO");
   int readyFds =
       epoll_wait(epollFd, events, configGCP.WAL_EPOLL_CONNECTIONS, timeout);
   if (readyFds == -1) {
@@ -19,6 +20,7 @@ int walEpollIO(int epollFd, int eventFd, struct epoll_event &ev,
   }
 
   // There should only be one readyFd i.e., eventFd
+  logger("WAL thread : Looping for readyFds : ", readyFds);
   for (int n = 0; n < readyFds; ++n) {
     if (events[n].data.fd == eventFd) {
       // Reading 1 Byte from eventFd (resets its counter)
@@ -39,9 +41,11 @@ void traverseQueueAndWriteToFile(
     std::fstream &wal, std::string groupName,
     moodycamel::ConcurrentQueue<std::string> &walQueue) {
 
+  logger("WAL thread : In traverseQueueAndWriteToFile");
   int pos = 0;
   int queueSize = walQueue.size_approx();
 
+  logger("WAL thread : walQueue size : ", queueSize);
   while (pos < queueSize) {
 
     string operation;
@@ -52,7 +56,7 @@ void traverseQueueAndWriteToFile(
     if (!wal.is_open()) {
       logger("WAL thread : WAL file is not open, try opening");
       std::string groupWalFile = generateWalFileName(groupName);
-      wal.open(groupWalFile, ios::app);
+      wal.open(groupWalFile, ios::app | ios::out);
       if (!wal.is_open()) {
         logger("WAL thread : Unable to open WAL file: ", groupWalFile);
         logger("WAL thread : This operation will not be logged in WAL file, "
@@ -62,6 +66,7 @@ void traverseQueueAndWriteToFile(
       }
     }
 
+    logger("WAL thread : Writing operation to wal file, op : ", operation);
     wal.write(operation.c_str(), operation.length());
 
     if (wal.fail()) {
@@ -72,13 +77,19 @@ void traverseQueueAndWriteToFile(
 
     pos++;
   }
+
+  wal.flush();
 }
 
 void walWriter(std::fstream &wal, std::string groupName,
                moodycamel::ConcurrentQueue<std::string> &walQueue,
                int eventFd) {
 
+  logger("WAL thread : started");
   struct epoll_event ev, events[configGCP.WAL_EPOLL_CONNECTIONS];
+
+  logger("WAL thread : configGCP.WAL_EPOLL_CONNECTIONS : ",
+         configGCP.WAL_EPOLL_CONNECTIONS);
 
   int epollFd = epoll_create1(0);
   if (epollFd == -1) {
@@ -98,6 +109,7 @@ void walWriter(std::fstream &wal, std::string groupName,
 
   int timeout = 0;
 
+  logger("WAL thread : Starting event loop");
   while (1) {
     // Listen on epoll
     walEpollIO(epollFd, eventFd, ev, events, timeout);
@@ -111,5 +123,6 @@ void walWriter(std::fstream &wal, std::string groupName,
     } else {
       timeout = -1;
     }
+    logger("WAL thread : timeout : ", timeout);
   }
 }
