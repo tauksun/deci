@@ -7,6 +7,7 @@
 #include "../common/operate.hpp"
 #include "config.hpp"
 #include "group.hpp"
+#include "wal.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
@@ -15,6 +16,7 @@
 #include <sys/eventfd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <thread>
 #include <unistd.h>
 #include <unordered_map>
 
@@ -267,6 +269,31 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
                    " to ConcurrentQueue of Group : ", parsed.reg.group);
 
             groupEventFds[parsed.reg.group] = groups[parsed.reg.group].eventFd;
+          } else if (parsed.reg.type ==
+                     configCommon::WAL_SYNC_CONNECTION_TYPE) {
+
+            logger("Server : Removing wal sync connection from server thread "
+                   "epoll monitoring, fd : ",
+                   msg.fd);
+
+            string groupName = parsed.reg.group;
+            if (epoll_ctl(epollFd, EPOLL_CTL_DEL, msg.fd, nullptr) == -1) {
+              logger("Server : Error while removing from server thread "
+                     "monitoring, fd : ",
+                     msg.fd, " group : ", groupName);
+              perror("Server : WAL sync connection error while removing from "
+                     "monitoring : epoll_ctl");
+              logger("Server : Closing connection for fd : ", msg.fd);
+              close(msg.fd);
+              continue;
+            }
+
+            // Start a new thread
+            logger("Server : Starting new thread for WAL SYNC for LCP : ",
+                   parsed.reg.lcp, " in group : ", groupName);
+
+            thread WalSyncThread(walReader, groupName, msg.fd);
+            WalSyncThread.detach();
           } else {
             logger("Server : Adding to fdGroupLCPMap, fd : ", msg.fd);
             FdGroupLCP fdData;

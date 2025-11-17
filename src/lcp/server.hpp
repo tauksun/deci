@@ -10,6 +10,7 @@ void server(
     const char *,
     moodycamel::ConcurrentQueue<GlobalCacheOpMessage> &GlobalCacheOpsQueue,
     moodycamel::ConcurrentQueue<Operation> &SynchronizationQueue,
-    int globalCacheThreadEventFd, int synchronizationEventFd);
+    int globalCacheThreadEventFd, int synchronizationEventFd,
+    moodycamel::ConcurrentQueue<DecodedMessage> &WalSyncQueue, int walSyncEventFd);
 
 #endif

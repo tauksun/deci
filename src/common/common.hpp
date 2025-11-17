@@ -33,6 +33,7 @@ struct DecodedMessage {
   Registration reg;
   Flag flag;
   DecodeError error;
+  int64_t messageLength = 0;
 };
 
 struct Operation {

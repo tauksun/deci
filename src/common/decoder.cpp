@@ -8,6 +8,7 @@
 // *2\r\n$4\r\nGGET\r\n$4\r\nName\r\n
 
 #include "decoder.hpp"
+#include "logger.hpp"
 
 int extractLength(int &offset, string &str) {
   string oplen = "";
@@ -21,7 +22,9 @@ int extractLength(int &offset, string &str) {
   return stoi(oplen);
 }
 
-DecodedMessage decoder(string &str) {
+DecodedMessage decoder(string &str, bool extractLen) {
+  logger("DECODER : str : ", str);
+
   DecodedMessage msg;
 
   int len = str.length();
@@ -69,6 +72,7 @@ DecodedMessage decoder(string &str) {
   count++;
   offset += oplength + 2;
 
+  logger("DECODER : op : ", op);
   if (op == "GET" || op == "GGET" || op == "GDEL" || op == "EXISTS" ||
       op == "GEXISTS") {
     // Extract : key
@@ -131,6 +135,12 @@ DecodedMessage decoder(string &str) {
 
     msg.flag.sync = stoi(&str[offset]);
     count++;
+
+    // Used during applying WAL
+    if (extractLen) {
+      msg.messageLength = offset + 3;
+    }
+
   } else if (op == "SET") {
     // Extract : key, value, timestamp, sync
     if (len < offset) {
@@ -194,6 +204,10 @@ DecodedMessage decoder(string &str) {
     msg.flag.sync = stoi(&str[offset]);
     count++;
 
+    // Used during applying WAL
+    if (extractLen) {
+      msg.messageLength = offset + 3;
+    }
   } else if (op == "GSET") {
     // Extract : key, value
 
@@ -312,6 +326,43 @@ DecodedMessage decoder(string &str) {
     msg.reg.group = str.substr(offset, groupLength);
     count++;
     offset += groupLength + 2;
+  } else if (op == "GWALSYNC") {
+    // Extract : Wal sync operation as key
+    // Wal sync operation
+    if (len < offset) {
+      msg.error.partial = true;
+      return msg;
+    }
+    if (str[offset] != '$') {
+      msg.error.invalid = true;
+      return msg;
+    }
+    offset++;
+
+    int opLength = extractLength(offset, str);
+    msg.key = str.substr(offset, opLength);
+    count++;
+    offset += opLength + 2;
+
+    logger("DECODER : op : ", op, " key : ", msg.key);
+    if (msg.key == "RESUME") {
+      // Extract seek
+      if (len < offset) {
+        msg.error.partial = true;
+        return msg;
+      }
+      if (str[offset] != '$') {
+        msg.error.invalid = true;
+        return msg;
+      }
+      offset++;
+
+      int seekerLength = extractLength(offset, str);
+      msg.value = stol(str.substr(offset, seekerLength));
+      count++;
+      offset += seekerLength + 2;
+    }
+
   } else {
     msg.error.invalid = true;
     return msg;

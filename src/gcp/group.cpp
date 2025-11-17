@@ -8,6 +8,7 @@
 #include <deque>
 #include <fstream>
 #include <ios>
+#include <pthread.h>
 #include <string>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
@@ -333,7 +334,7 @@ int group(int eventFd,
     fstream wal(groupWalFile, ios::app | ios::out);
     if (!wal.is_open()) {
       logger("Group : Error while opening WAL file for group : ", groupName);
-      exit(EXIT_FAILURE);
+      pthread_exit(0);
     }
 
     logger("Group : Successfully opened wal file : ", groupWalFile,

@@ -8,6 +8,7 @@
 #include "registration.hpp"
 #include "server.hpp"
 #include "synchronizationOps.hpp"
+#include "wal.hpp"
 #include <functional>
 #include <sys/eventfd.h>
 #include <thread>
@@ -24,14 +25,17 @@ int main() {
   // Event fds for triggering peer threads
   int globalCacheThreadEventFd = eventfd(0, EFD_NONBLOCK);
   int synchronizationEventFd = eventfd(0, EFD_NONBLOCK);
+  int walSyncEventFd = eventfd(0, EFD_NONBLOCK);
 
   // Concurrent queues
   moodycamel::ConcurrentQueue<GlobalCacheOpMessage> GlobalCacheOpsQueue;
   moodycamel::ConcurrentQueue<Operation> SynchronizationQueue;
+  moodycamel::ConcurrentQueue<DecodedMessage> WalSyncQueue;
 
   std::thread serverThread(server, configLCP.sock.c_str(),
                            ref(GlobalCacheOpsQueue), ref(SynchronizationQueue),
-                           globalCacheThreadEventFd, synchronizationEventFd);
+                           globalCacheThreadEventFd, synchronizationEventFd,
+                           ref(WalSyncQueue), walSyncEventFd);
 
   // Synchronously register with GCP
   lcpRegistration();
@@ -42,6 +46,8 @@ int main() {
   std::thread SynchronizationThread(cacheSynchronization,
                                     ref(SynchronizationQueue),
                                     synchronizationEventFd, lcpId);
+  std::thread WalSyncThread(walSync, ref(WalSyncQueue), walSyncEventFd, lcpId);
+  WalSyncThread.detach();
 
   // TODO: Learn more about this & the best practices around it
   serverThread.join();

@@ -5,7 +5,7 @@
 #include <string>
 using namespace std;
 
-DecodedMessage decoder(string &);
+DecodedMessage decoder(string &, bool extractLen = false);
 
 int extractLength(int &offset, std::string &str);
 

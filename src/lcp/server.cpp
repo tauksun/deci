@@ -20,7 +20,7 @@ unordered_map<string, CacheValue> cache;
 void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
              struct epoll_event *events, int timeout,
              std::deque<ReadSocketMessage> &readSocketQueue,
-             int synchronizationEventFd) {
+             int synchronizationEventFd, int walSyncEventFd) {
 
   logger("Server : In epollIO");
   int readyFds =
@@ -76,6 +76,13 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
       uint64_t counter;
       read(synchronizationEventFd, &counter, sizeof(counter));
       logger("Server : Read synchronizationEventFd counter : ", counter);
+    } else if (events[n].data.fd == walSyncEventFd) {
+      // Reading 1 Byte from eventFd (resets its counter)
+      logger("Server : Reading from walSyncEventFd");
+      uint64_t counter;
+      read(walSyncEventFd, &counter, sizeof(counter));
+      logger("Server : Read walSyncEventFd counter : ", counter);
+
     } else {
       // Add to readSocketQueue
       logger("Server : Adding to readSocketQueue : ", events[n].data.fd);
@@ -299,11 +306,36 @@ void readFromSynchronizationQueue(
   }
 }
 
+void readFromWalSyncQueue(
+    moodycamel::ConcurrentQueue<DecodedMessage> &WalSyncQueue) {
+  // Operate on n number of messages
+
+  logger("Server : In readFromWalSyncQueue");
+  unsigned long queueSize = WalSyncQueue.size_approx();
+  logger("Server : Queue size : ", queueSize);
+  WriteSocketMessage res;
+  Operation op;
+
+  for (int i = 0; i < min(queueSize, configLCP.MAX_WAL_SYNC_MESSAGES); i++) {
+    DecodedMessage decoded;
+    bool found = WalSyncQueue.try_dequeue(decoded);
+    if (!found) {
+      break;
+    }
+
+    op.msg = decoded;
+    logger("Server : Operating on cache with walMesssag");
+    operate(op, res, cache);
+  }
+}
+
 void server(
     const char *sock,
     moodycamel::ConcurrentQueue<GlobalCacheOpMessage> &GlobalCacheOpsQueue,
     moodycamel::ConcurrentQueue<Operation> &SynchronizationQueue,
-    int globalCacheThreadEventFd, int synchronizationEventFd) {
+    int globalCacheThreadEventFd, int synchronizationEventFd,
+    moodycamel::ConcurrentQueue<DecodedMessage> &WalSyncQueue,
+    int walSyncEventFd) {
   logger("Server : Unlinking sock : ", sock);
   unlink(sock);
 
@@ -373,7 +405,17 @@ void server(
   ev.data.fd = synchronizationEventFd;
 
   if (epoll_ctl(epollFd, EPOLL_CTL_ADD, synchronizationEventFd, &ev) == -1) {
-    perror("epoll_ctl synchronizationEventFd");
+    perror("Server : epoll_ctl synchronizationEventFd");
+    exit(EXIT_FAILURE);
+  }
+
+  // Add walSyncEventFd for monitoring
+  // Read from it after receiving event to reset the Kernel counter
+  ev.events = EPOLLIN | EPOLLET;
+  ev.data.fd = walSyncEventFd;
+
+  if (epoll_ctl(epollFd, EPOLL_CTL_ADD, walSyncEventFd, &ev) == -1) {
+    perror("Server : epoll_ctl walSyncEventFd");
     exit(EXIT_FAILURE);
   }
 
@@ -393,17 +435,19 @@ void server(
      * */
 
     epollIO(epollFd, socketFd, ev, events, timeout, readSocketQueue,
-            synchronizationEventFd);
+            synchronizationEventFd, walSyncEventFd);
     readFromSocketQueue(readSocketQueue, operationQueue, writeSocketQueue,
                         GlobalCacheOpsQueue, globalCacheThreadEventFd);
     performOperation(readSocketQueue, operationQueue, writeSocketQueue);
     readFromSynchronizationQueue(SynchronizationQueue, writeSocketQueue);
+    readFromWalSyncQueue(WalSyncQueue);
     writeToSocketQueue(writeSocketQueue);
 
     // If there are operations in read/write queue > keep timeout to be 0,
     // else -1(Infinity)
     if (readSocketQueue.size() || operationQueue.size() ||
-        writeSocketQueue.size() || SynchronizationQueue.size_approx()) {
+        writeSocketQueue.size() || SynchronizationQueue.size_approx() ||
+        WalSyncQueue.size_approx()) {
       timeout = 0;
     } else {
       timeout = -1;
