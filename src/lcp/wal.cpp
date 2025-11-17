@@ -78,8 +78,6 @@ void walSync(moodycamel::ConcurrentQueue<DecodedMessage> &WalSyncQueue,
   // Construct continue message once for loop
   walCommunication.pop_back();
   walCommunication.push_back(continueEle);
-  string continueMessage = encoder(walCommunication);
-  logger("WAL thread : continueMessage : ", continueMessage);
 
   // Read the WAL & push to ConcurrentQueue
   long seeker = 0;
@@ -136,8 +134,10 @@ void walSync(moodycamel::ConcurrentQueue<DecodedMessage> &WalSyncQueue,
                syncStartTimestamp,
                " wal message timestamp : ", decodedWalMessage.timestamp);
 
-        walCommunication.push_back(stop);
-        string stopMessage = encoder(walCommunication);
+        vector<QueryArrayElement> stopArray;
+        stopArray.push_back(op);
+        stopArray.push_back(stop);
+        string stopMessage = encoder(stopArray);
 
         logger("WAL thread : Writing STOP to GCP, stopMessage : ", stopMessage);
         writeSync(stopMessage, connSockFd);
@@ -163,7 +163,11 @@ void walSync(moodycamel::ConcurrentQueue<DecodedMessage> &WalSyncQueue,
     }
 
     // Write continue to GCP
-    logger("WAL thread : Writing continue message to GCP");
+    logger("WAL thread : Writing continue message to GCP, connSockFd : ",
+           connSockFd);
+
+    string continueMessage = encoder(walCommunication);
+    logger("WAL thread : continueMessage : ", continueMessage);
     if (writeSync(continueMessage, connSockFd) == -1) {
       logger("WAL thread : Error while writing continue message to GCP");
       close(connSockFd);

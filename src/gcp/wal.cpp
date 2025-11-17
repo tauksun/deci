@@ -17,15 +17,17 @@ DecodedMessage readSync(int connSock) {
   string msg;
   DecodedMessage decoded;
 
+  logger("WAL thread : readSync : connSock : ", connSock);
   while (true) {
     int bufSize = 1023;
     char buf[bufSize];
 
+    logger("WAL thread : readSync : Waiting on read for connSock : ", connSock);
     int readBytes = read(connSock, buf, bufSize);
 
     if (readBytes <= 0) {
-      logger("WAL thread : Error while reading from connSock : ", connSock,
-             " readBytes : ", readBytes);
+      logger("WAL thread : readSync : Error while reading from connSock : ",
+             connSock, " readBytes : ", readBytes);
       decoded.error.invalid = true;
       break;
     }
@@ -35,7 +37,10 @@ DecodedMessage readSync(int connSock) {
     // check if the read is partial
     DecodedMessage temp = decoder(msg);
 
+    logger("WAL thread : readSync : partial : ", temp.error.partial,
+           " invalid : ", temp.error.invalid);
     if (!temp.error.partial || temp.error.invalid) {
+      logger("WAL thread : readSync : Decoded temp message");
       decoded = temp;
       break;
     }
