@@ -11,7 +11,7 @@ void logNoop(const std::string &);
 extern std::function<void(const std::string &)>
     logFunc; // extern, defined in .cpp
 
-void initializeLogger();
+void initializeLogger(const std::string filepath = "log.log");
 
 template <typename... Args> void logger(Args &&...args) {
   std::ostringstream oss;

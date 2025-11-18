@@ -14,7 +14,7 @@
 #include <thread>
 
 int main() {
-  initializeLogger();
+  initializeLogger("lcp.log");
   string lcpId = generateRandomId();
   logger("Starting lcp : ", lcpId);
 

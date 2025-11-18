@@ -17,6 +17,7 @@ struct LCP_CONFIG {
   string GCP_SERVER_IP = "127.0.0.1";
   int GCP_SERVER_PORT = 7480;
   unsigned long MAX_GCP_CONNECTIONS = 2;
+  unsigned long MAX_WAL_SYNC_MESSAGES = 100;
 };
 
 struct GCP_CONFIG {
