@@ -29,10 +29,24 @@ void epollIO(int epollFd, struct epoll_event *events,
     if (events[n].data.fd == globalCacheThreadEventFd) {
       // Reading 1 Byte from eventFd (resets its counter)
       logger("globalCacheOps thread : Reading from globalCacheThreadEventFd");
-      uint64_t counter;
-      read(globalCacheThreadEventFd, &counter, sizeof(counter));
-      logger("globalCacheOps thread : Read globalCacheThreadEventFd counter : ",
-             counter);
+      while (true) {
+        uint64_t counter;
+        int count = read(globalCacheThreadEventFd, &counter, sizeof(counter));
+        if (count == -1) {
+          if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            // No more data to read
+            logger("globalCacheOps thread : Drained globalCacheThreadEventFd");
+            break;
+          } else {
+            perror("globalCacheOps thread : Error while reading "
+                   "globalCacheThreadEventFd");
+            break;
+          }
+        }
+        logger(
+            "globalCacheOps thread : Read globalCacheThreadEventFd counter : ",
+            counter);
+      }
     } else {
       // Add to readSocketQueue
       logger("globalCacheOps thread : Adding to readSocketQueue : ",

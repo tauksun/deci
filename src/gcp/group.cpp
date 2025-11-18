@@ -39,9 +39,21 @@ int gEpollIO(int epollFd, int eventFd, struct epoll_event &ev,
     if (events[n].data.fd == eventFd) {
       // Reading 1 Byte from eventFd (resets its counter)
       logger("Group : Reading eventFd for group ");
-      uint64_t counter;
-      read(eventFd, &counter, sizeof(counter));
-      logger("Group : Read eventFd counter : ", counter);
+      while (true) {
+        uint64_t counter;
+        int count = read(eventFd, &counter, sizeof(counter));
+        if (count == -1) {
+          if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            // No more data to read
+            logger("Group : Drained eventFd");
+            break;
+          } else {
+            perror("Group : Error while reading eventFd");
+            break;
+          }
+        }
+        logger("Group : Read eventFd counter : ", counter);
+      }
     } else {
       // Read LCP sockets synchronization response
       // Push into readSocketQueue

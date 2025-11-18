@@ -73,16 +73,39 @@ void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
     } else if (events[n].data.fd == synchronizationEventFd) {
       // Reading 1 Byte from eventFd (resets its counter)
       logger("Server : Reading from synchronizationEventFd");
-      uint64_t counter;
-      read(synchronizationEventFd, &counter, sizeof(counter));
-      logger("Server : Read synchronizationEventFd counter : ", counter);
+      while (true) {
+        uint64_t counter;
+        int count = read(synchronizationEventFd, &counter, sizeof(counter));
+        if (count == -1) {
+          if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            // No more data to read
+            logger("Server : Drained synchronizationEventFd");
+            break;
+          } else {
+            perror("Server : Error while reading synchronizationEventFd");
+            break;
+          }
+        }
+        logger("Server : Read synchronizationEventFd counter : ", counter);
+      }
     } else if (events[n].data.fd == walSyncEventFd) {
       // Reading 1 Byte from eventFd (resets its counter)
       logger("Server : Reading from walSyncEventFd");
-      uint64_t counter;
-      read(walSyncEventFd, &counter, sizeof(counter));
-      logger("Server : Read walSyncEventFd counter : ", counter);
-
+      while (true) {
+        uint64_t counter;
+        int count = read(walSyncEventFd, &counter, sizeof(counter));
+        if (count == -1) {
+          if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            // No more data to read
+            logger("Server : Drained walSyncEventFd");
+            break;
+          } else {
+            perror("Server : Error while reading walSyncEventFd");
+            break;
+          }
+        }
+        logger("Server : Read walSyncEventFd counter : ", counter);
+      }
     } else {
       // Add to readSocketQueue
       logger("Server : Adding to readSocketQueue : ", events[n].data.fd);
