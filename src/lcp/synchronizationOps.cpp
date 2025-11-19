@@ -80,15 +80,11 @@ void readFromSocketQueue(
       } else {
         logger("cacheSynchronization thread : Successfully parsed, adding to "
                "SynchronizationQueue");
+        drainSocketSync(msg.fd);
         Operation op;
         op.fd = msg.fd;
         op.msg = parsed;
         SynchronizationQueue.enqueue(op);
-
-        // Re-queue for event loop to read this till EAGAIN
-        msg.data = "";
-        msg.readBytes = 0;
-        readSocketQueue.push_back(msg);
       }
     }
 

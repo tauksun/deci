@@ -3,5 +3,6 @@
 
 int makeSocketNonBlocking(int fd);
 int makeSocketBlocking(int fd);
+bool drainSocketSync(int fd);
 
 #endif

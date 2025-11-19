@@ -121,6 +121,8 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
         logger(
             "globalCacheOps thread : Successfully decoded response for fd : ",
             msg.fd);
+        drainSocketSync(msg.fd);
+
         // Write to Socket Queue for Application logic
         // Else > Add back to connection pool
 
@@ -141,11 +143,6 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
         logger("globalCacheOps thread : adding ", msg.fd,
                " back to connection pool");
         connectionPool.push_back(msg.fd);
-
-        // Re-queue for event loop to read this till EAGAIN
-        msg.data = "";
-        msg.readBytes = 0;
-        readSocketQueue.push_back(msg);
       }
     }
 

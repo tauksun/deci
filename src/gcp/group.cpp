@@ -1,6 +1,7 @@
 #include "group.hpp"
 #include "../common/common.hpp"
 #include "../common/logger.hpp"
+#include "../common/makeSocketNonBlocking.hpp"
 #include "../common/responseDecoder.hpp"
 #include "../common/wal.hpp"
 #include "config.hpp"
@@ -115,12 +116,9 @@ void readFromSocketQueue(
         readSocketQueue.push_back(msg);
       } else if (parsed.error.invalid) {
         logger("Group : Invalid message : ", msg.data, " fd : ", msg.fd);
-
-        // Re-queue for event loop to read this till EAGAIN
-        msg.data = "";
-        msg.readBytes = 0;
-        readSocketQueue.push_back(msg);
+        drainSocketSync(msg.fd);
       } else {
+        drainSocketSync(msg.fd);
         logger("Group : Successfully received sync response for fd : ", msg.fd);
         logger("Group : Adding back to connection pool, fd : ", msg.fd);
         auto fdLCP = fdLCPMap.find(msg.fd);
@@ -131,11 +129,6 @@ void readFromSocketQueue(
         lcpQueue->second.push_back(msg.fd);
         logger("Group : Successfully added fd :", msg.fd,
                " back to connection pool in lcp : ", lcp);
-
-        // Re-queue for event loop to read this till EAGAIN
-        msg.data = "";
-        msg.readBytes = 0;
-        readSocketQueue.push_back(msg);
       }
     }
 

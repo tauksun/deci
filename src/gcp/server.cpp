@@ -151,21 +151,16 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
         readSocketQueue.push_back(msg);
       } else if (parsed.error.invalid) {
         logger("Server : Invalid message : ", msg.data);
+        drainSocketSync(msg.fd);
         string res = "Invalid Message";
         WriteSocketMessage errorMessage;
         errorMessage.fd = msg.fd;
         errorMessage.response = encoder(&res, "error");
         writeSocketQueue.push_back(errorMessage);
-
-        // Re-queue for event loop to read this till EAGAIN
-        logger(
-            "Server : Re-queue for event loop to read this till EAGAIN, fd : ",
-            msg.fd);
-        msg.data = "";
-        msg.readBytes = 0;
-        readSocketQueue.push_back(msg);
       } else {
         logger("Server : Successfully parsed");
+        drainSocketSync(msg.fd);
+
         if (isSyncMessage(parsed.operation)) {
           // Sync operation > push in group's concurrent queue
           auto val = fdGroupLCPMap.find(msg.fd);
@@ -321,14 +316,6 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
           op.msg = parsed;
           operationQueue.push_back(op);
         }
-
-        // Re-queue for event loop to read this till EAGAIN
-        logger(
-            "Server : Re-queue for event loop to read this till EAGAIN, fd : ",
-            msg.fd);
-        msg.data = "";
-        msg.readBytes = 0;
-        readSocketQueue.push_back(msg);
       }
     }
 
