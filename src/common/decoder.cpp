@@ -41,6 +41,8 @@ DecodedMessage decoder(string &str, bool extractLen) {
 
   // Fetch number of elements in array, use it to decide if
   // message is partial
+  // TODO: Extract this dynamically in incremental parser implementation
+  // As of now, it assumes single digit elements ( which works for now )
   int numberOfElements = stoi(&str[1]);
   int count = 0;
   int offset = 0;
@@ -61,7 +63,7 @@ DecodedMessage decoder(string &str, bool extractLen) {
   // Fetch operation length
   int oplength = extractLength(offset, str);
 
-  if (len < offset + oplength) {
+  if (len < offset + oplength + 1) {
     msg.error.partial = true;
     return msg;
   }
@@ -76,7 +78,7 @@ DecodedMessage decoder(string &str, bool extractLen) {
   if (op == "GET" || op == "GGET" || op == "GDEL" || op == "EXISTS" ||
       op == "GEXISTS") {
     // Extract : key
-    if (len < offset) {
+    if (len < offset + 1) {
       msg.error.partial = true;
       return msg;
     }
@@ -87,11 +89,15 @@ DecodedMessage decoder(string &str, bool extractLen) {
     offset++;
 
     int keyLength = extractLength(offset, str);
+    if (len < offset + keyLength + 1) {
+      msg.error.partial = true;
+      return msg;
+    }
     msg.key = str.substr(offset, keyLength);
     count++;
   } else if (op == "DEL") {
     // Extract : key, timestamp, sync
-    if (len < offset) {
+    if (len < offset + 1) {
       msg.error.partial = true;
       return msg;
     }
@@ -102,12 +108,16 @@ DecodedMessage decoder(string &str, bool extractLen) {
     offset++;
 
     int keyLength = extractLength(offset, str);
+    if (len < offset + keyLength + 1) {
+      msg.error.partial = true;
+      return msg;
+    }
     msg.key = str.substr(offset, keyLength);
     count++;
     offset += keyLength + 2;
 
     // Timestamp
-    if (len < offset) {
+    if (len < offset + 1) {
       msg.error.partial = true;
       return msg;
     }
@@ -123,7 +133,7 @@ DecodedMessage decoder(string &str, bool extractLen) {
     offset += timestampLength + 2;
 
     // Sync
-    if (len < offset) {
+    if (len < offset + 1) {
       msg.error.partial = true;
       return msg;
     }
@@ -143,7 +153,7 @@ DecodedMessage decoder(string &str, bool extractLen) {
 
   } else if (op == "SET") {
     // Extract : key, value, timestamp, sync
-    if (len < offset) {
+    if (len < offset + 1) {
       msg.error.partial = true;
       return msg;
     }
@@ -154,12 +164,16 @@ DecodedMessage decoder(string &str, bool extractLen) {
     offset++;
 
     int keyLength = extractLength(offset, str);
+    if (len < offset + keyLength + 1) {
+      msg.error.partial = true;
+      return msg;
+    }
     msg.key = str.substr(offset, keyLength);
     count++;
     offset += keyLength + 2;
 
     // Value
-    if (len < offset) {
+    if (len < offset + 1) {
       msg.error.partial = true;
       return msg;
     }
@@ -170,12 +184,16 @@ DecodedMessage decoder(string &str, bool extractLen) {
     offset++;
 
     int valueLength = extractLength(offset, str);
+    if (len < offset + valueLength + 1) {
+      msg.error.partial = true;
+      return msg;
+    }
     msg.value = str.substr(offset, valueLength);
     count++;
     offset += valueLength + 2;
 
     // Timestamp
-    if (len < offset) {
+    if (len < offset + 1) {
       msg.error.partial = true;
       return msg;
     }
@@ -186,12 +204,16 @@ DecodedMessage decoder(string &str, bool extractLen) {
     offset++;
 
     int timestampLength = extractLength(offset, str);
+    if (len < offset + timestampLength + 1) {
+      msg.error.partial = true;
+      return msg;
+    }
     msg.timestamp = stol(str.substr(offset, timestampLength));
     count++;
     offset += timestampLength + 2;
 
     // Sync
-    if (len < offset) {
+    if (len < offset + 1) {
       msg.error.partial = true;
       return msg;
     }
@@ -211,7 +233,7 @@ DecodedMessage decoder(string &str, bool extractLen) {
   } else if (op == "GSET") {
     // Extract : key, value
 
-    if (len < offset) {
+    if (len < offset + 1) {
       msg.error.partial = true;
       return msg;
     }
@@ -222,12 +244,16 @@ DecodedMessage decoder(string &str, bool extractLen) {
     offset++;
 
     int keyLength = extractLength(offset, str);
+    if (len < offset + keyLength + 1) {
+      msg.error.partial = true;
+      return msg;
+    }
     msg.key = str.substr(offset, keyLength);
     count++;
     offset += keyLength + 2;
 
     // Value
-    if (len < offset) {
+    if (len < offset + 1) {
       msg.error.partial = true;
       return msg;
     }
@@ -238,12 +264,16 @@ DecodedMessage decoder(string &str, bool extractLen) {
     offset++;
 
     int valueLength = extractLength(offset, str);
+    if (len < offset + valueLength + 1) {
+      msg.error.partial = true;
+      return msg;
+    }
     msg.value = str.substr(offset, valueLength);
     count++;
     offset += valueLength + 2;
   } else if (op == "GHEALTH") {
     // Extract : timestamp
-    if (len < offset) {
+    if (len < offset + 1) {
       msg.error.partial = true;
       return msg;
     }
@@ -254,6 +284,10 @@ DecodedMessage decoder(string &str, bool extractLen) {
     offset++;
 
     int timestampLength = extractLength(offset, str);
+    if (len < offset + timestampLength + 1) {
+      msg.error.partial = true;
+      return msg;
+    }
     msg.timestamp = stol(str.substr(offset, timestampLength));
     count++;
     offset += timestampLength + 2;
@@ -262,7 +296,7 @@ DecodedMessage decoder(string &str, bool extractLen) {
     // Extract : Group, LCP, Type
 
     // Group
-    if (len < offset) {
+    if (len < offset + 1) {
       msg.error.partial = true;
       return msg;
     }
@@ -273,12 +307,16 @@ DecodedMessage decoder(string &str, bool extractLen) {
     offset++;
 
     int groupLength = extractLength(offset, str);
+    if (len < offset + groupLength + 1) {
+      msg.error.partial = true;
+      return msg;
+    }
     msg.reg.group = str.substr(offset, groupLength);
     count++;
     offset += groupLength + 2;
 
     // LCP
-    if (len < offset) {
+    if (len < offset + 1) {
       msg.error.partial = true;
       return msg;
     }
@@ -289,12 +327,16 @@ DecodedMessage decoder(string &str, bool extractLen) {
     offset++;
 
     int lcpLength = extractLength(offset, str);
+    if (len < offset + lcpLength + 1) {
+      msg.error.partial = true;
+      return msg;
+    }
     msg.reg.lcp = str.substr(offset, lcpLength);
     count++;
     offset += lcpLength + 2;
 
     // Type
-    if (len < offset) {
+    if (len < offset + 1) {
       msg.error.partial = true;
       return msg;
     }
@@ -305,6 +347,10 @@ DecodedMessage decoder(string &str, bool extractLen) {
     offset++;
 
     int typeLength = extractLength(offset, str);
+    if (len < offset + typeLength + 1) {
+      msg.error.partial = true;
+      return msg;
+    }
     msg.reg.type = str.substr(offset, typeLength);
     count++;
     offset += typeLength + 2;
@@ -312,7 +358,7 @@ DecodedMessage decoder(string &str, bool extractLen) {
     // Extract : Group
 
     // Group
-    if (len < offset) {
+    if (len < offset + 1) {
       msg.error.partial = true;
       return msg;
     }
@@ -323,13 +369,17 @@ DecodedMessage decoder(string &str, bool extractLen) {
     offset++;
 
     int groupLength = extractLength(offset, str);
+    if (len < offset + groupLength + 1) {
+      msg.error.partial = true;
+      return msg;
+    }
     msg.reg.group = str.substr(offset, groupLength);
     count++;
     offset += groupLength + 2;
   } else if (op == "GWALSYNC") {
     // Extract : Wal sync operation as key
     // Wal sync operation
-    if (len < offset) {
+    if (len < offset + 1) {
       msg.error.partial = true;
       return msg;
     }
@@ -340,6 +390,10 @@ DecodedMessage decoder(string &str, bool extractLen) {
     offset++;
 
     int opLength = extractLength(offset, str);
+    if (len < offset + opLength + 1) {
+      msg.error.partial = true;
+      return msg;
+    }
     msg.key = str.substr(offset, opLength);
     count++;
     offset += opLength + 2;
@@ -347,7 +401,7 @@ DecodedMessage decoder(string &str, bool extractLen) {
     logger("DECODER : op : ", op, " key : ", msg.key);
     if (msg.key == "RESUME") {
       // Extract seek
-      if (len < offset) {
+      if (len < offset + 1) {
         msg.error.partial = true;
         return msg;
       }
@@ -358,6 +412,10 @@ DecodedMessage decoder(string &str, bool extractLen) {
       offset++;
 
       int seekerLength = extractLength(offset, str);
+      if (len < offset + seekerLength + 1) {
+        msg.error.partial = true;
+        return msg;
+      }
       msg.value = stol(str.substr(offset, seekerLength));
       count++;
       offset += seekerLength + 2;
