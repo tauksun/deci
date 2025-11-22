@@ -96,7 +96,7 @@ void createConfig(I_CONFIG &configuration) {
        }},
       {"MAX_SYNC_CONNECTIONS",
        [&](const string &val) {
-         (*configuration.lcp_config).MAX_SYNC_MESSAGES = stoi(val);
+         (*configuration.lcp_config).MAX_SYNC_CONNECTIONS = stoi(val);
        }},
       {"GCP_SERVER_PORT",
        [&](const string &val) {
