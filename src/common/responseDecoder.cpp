@@ -25,15 +25,16 @@ DecodedResponse responseDecoder(string &response) {
   if (type == '$') {
     int strlen = extractLength(offset, response);
 
-    if (response.length() < offset + strlen + 1) { // +1 for delimiter
+    if (strlen == -1 ||
+        response.length() < offset + strlen + 1) { // +1 for delimiter
       decodedResponse.error.partial = true;
       return decodedResponse;
     }
   }
   // :1234\r\n
   else if (type == ':') {
-    extractLength(offset, response);
-    if (response.length() < offset) {
+    int len = extractLength(offset, response);
+    if (len == -1 || response.length() < offset) {
       decodedResponse.error.partial = true;
       return decodedResponse;
     }
