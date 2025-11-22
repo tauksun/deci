@@ -148,11 +148,14 @@ void walWriter(std::fstream &wal, std::string groupName,
   logger("WAL writer : started");
   struct epoll_event ev, events[configGCP.WAL_EPOLL_CONNECTIONS];
 
-  logger("WAL writer : configGCP.WAL_EPOLL_CONNECTIONS : ",
-         configGCP.WAL_EPOLL_CONNECTIONS);
+  logger("WAL writer : groupName : ", groupName,
+         " configGCP.WAL_EPOLL_CONNECTIONS : ", configGCP.WAL_EPOLL_CONNECTIONS,
+         " eventFd : ", eventFd);
 
   int epollFd = epoll_create1(0);
   if (epollFd == -1) {
+    logger("WAL writer : Error during epoll_create1, epollFd : ", epollFd,
+           " groupName : ", groupName);
     perror("WAL writer : epoll create error");
     pthread_exit(0);
   }
@@ -163,13 +166,16 @@ void walWriter(std::fstream &wal, std::string groupName,
 
   // Add socket descriptor for monitoring
   if (epoll_ctl(epollFd, EPOLL_CTL_ADD, eventFd, &ev) == -1) {
+    logger("WAL writer : Error during epoll_ctl, groupName : ", groupName,
+           " eventFd : ", eventFd, " epollFd : ", epollFd);
     perror("WAL writer : epoll_ctl eventFd");
     pthread_exit(0);
   }
 
   int timeout = 0;
 
-  logger("WAL writer : Starting event loop");
+  logger("WAL writer : Starting event loop, groupName : ", groupName,
+         " eventFd : ", eventFd, " epollFd : ", epollFd);
   while (1) {
     // Listen on epoll
     walEpollIO(epollFd, eventFd, ev, events, timeout);

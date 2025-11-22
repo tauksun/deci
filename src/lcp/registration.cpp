@@ -68,7 +68,6 @@ int lcpRegistration() {
     }
 
     logger("Registered with GCP, response : ", response);
-    close(regSock);
   }
 
   return 0;

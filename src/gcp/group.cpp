@@ -29,6 +29,12 @@ int gEpollIO(int epollFd, int eventFd, struct epoll_event &ev,
              std::deque<ReadSocketMessage> &readSocketQueue) {
 
   logger("Group : In gEpollIO");
+  logger("################");
+  logger("epollFd : ", epollFd);
+  logger("events : ", events);
+  logger("configGCP.MAX_CONNECTIONS : ", configGCP.MAX_CONNECTIONS);
+  logger("timeout : ", timeout);
+  logger("################");
   int readyFds =
       epoll_wait(epollFd, events, configGCP.MAX_CONNECTIONS, timeout);
   if (readyFds == -1) {
@@ -242,6 +248,7 @@ void readFromGroupConcurrentSyncQueue(
       writeSocketQueue.push_back(response);
     }
   }
+
   // Trigger WAL eventFd
   if (isDataPushedToWALQueue) {
     triggerEventfd(walEventFd);
@@ -348,7 +355,7 @@ int group(int eventFd,
     int walEventFd = eventfd(0, EFD_NONBLOCK);
 
     logger("Group : Starting WAL writer thread for group : ", groupName,
-           " eventFd : ", eventFd);
+           " walEventFd : ", walEventFd);
     thread writer(walWriter, std::ref(wal), groupName, std::ref(walQueue),
                   walEventFd);
     writer.detach();
