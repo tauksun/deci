@@ -1,2 +1,5 @@
-build
+build/gcp
+build/lcp
+*.wal
+*.log
 todo*
