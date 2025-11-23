@@ -1,6 +1,7 @@
 #ifndef COMMON
 #define COMMON
 
+#include <cstdint>
 #include <string>
 using namespace std;
 

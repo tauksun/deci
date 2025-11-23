@@ -76,6 +76,8 @@ void createConfig(I_CONFIG &configuration) {
        [&](const string &val) {
          (*configuration.lcp_config).SOCKET_REUSE = stoi(val);
        }},
+      {"LCP",
+       [&](const string &val) { (*configuration.lcp_config).LCP = val; }},
       {"sock",
        [&](const string &val) { (*configuration.lcp_config).sock = val; }},
       {"MAX_READ_BYTES",

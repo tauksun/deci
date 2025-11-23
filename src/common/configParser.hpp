@@ -8,6 +8,7 @@ struct LCP_CONFIG {
   string GROUP = "deci";
   int MAX_CONNECTIONS = 100;
   int SOCKET_REUSE = 1;
+  string LCP = "lcp";
   string sock = "/tmp/lcp.sock";
   int MAX_READ_BYTES = 1023;
   int MAX_WRITE_BYTES = 1023;
