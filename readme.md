@@ -70,12 +70,3 @@ Contributions, issues and feature requests are welcome! Please open an issue to 
 [MIT](LICENSE)
 
 ---
-
-## Contact
-
-- Maintainer: [Your Name or Team]
-- Project home: [Your Project Homepage or GitHub repo link here]
-
----
-
-**Simple. Fast. Consistent. — Powered by Open Source.**
