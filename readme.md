@@ -67,6 +67,6 @@ Contributions, issues and feature requests are welcome! Please open an issue to 
 
 ## License
 
-[MIT](LICENSE)
+MIT
 
 ---
