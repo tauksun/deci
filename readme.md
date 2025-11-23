@@ -1,6 +1,6 @@
 # DECI – Distributed Eventually Consistent In-Memory Cache
 
-**Ultra-fast, local cache with global eventual consistency for microservices.**
+**Ultra-fast, local cache with eventual consistency for microservices.**
 
 ---
 
@@ -24,7 +24,7 @@ For each microservice instance, a dedicated **LCP** (Local Cache Process) runs o
 
 ## Overview Diagram
 
-![LCP provides fast local caching. GCP maintains a global cache accessed by LCPs via network.](./doc/LCP-GCP-Basic.svg)
+![LCP provides fast local caching. GCP maintains a global cache accessed by LCPs via network.](./doc/LCP-GCP-basic.svg)
 
 ---
 
