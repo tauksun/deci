@@ -143,6 +143,8 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
         logger("globalCacheOps thread : adding ", msg.fd,
                " back to connection pool");
         connectionPool.push_back(msg.fd);
+        logger("globalCacheOps thread : connectionPool size : ",
+               connectionPool.size());
       }
     }
 

@@ -135,6 +135,9 @@ void readFromSocketQueue(
         lcpQueue->second.push_back(msg.fd);
         logger("Group : Successfully added fd :", msg.fd,
                " back to connection pool in lcp : ", lcp);
+
+        logger("Group : lcp : ", lcp,
+               " connection pool size : ", lcpQueue->second.size());
       }
     }
 

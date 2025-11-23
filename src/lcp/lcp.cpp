@@ -40,7 +40,7 @@ int main() {
   // Synchronously register with GCP
   lcpRegistration();
 
-  std::thread healthThread(health);
+  // std::thread healthThread(health);
   std::thread GlobalCacheOpsThread(globalCacheOps, ref(GlobalCacheOpsQueue),
                                    globalCacheThreadEventFd, lcpId);
   std::thread SynchronizationThread(cacheSynchronization,
@@ -51,7 +51,7 @@ int main() {
 
   // TODO: Learn more about this & the best practices around it
   serverThread.join();
-  healthThread.join();
+  // healthThread.join();
   GlobalCacheOpsThread.join();
   SynchronizationThread.join();
 
