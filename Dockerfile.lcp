@@ -1,0 +1,33 @@
+# Build Stage
+FROM ubuntu:22.04 AS builder
+
+# Install build tools and dependencies
+RUN apt-get update && \
+    apt-get install -y make gcc g++ clang bash && \
+    rm -rf /var/lib/apt/lists/*
+    
+WORKDIR /app
+
+# Copy source code and Makefile
+COPY ./src /app/src
+COPY Makefile /app
+
+# Create build directory and compile
+RUN mkdir -p /app/build
+COPY ./build/lcp.conf /app/build/
+RUN make lcp
+
+# Package (runtime) Stage
+FROM ubuntu:22.04 AS runtime
+
+WORKDIR /app
+
+# create directory for logs, configuration file
+RUN mkdir -p /var/log/lcp
+RUN mkdir -p /etc/lcp
+
+COPY --from=builder /app/build/lcp /app/lcp
+COPY --from=builder /app/build/lcp.conf /etc/lcp/lcp.conf
+
+ENTRYPOINT ["/app/lcp"]
+

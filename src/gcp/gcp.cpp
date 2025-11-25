@@ -7,7 +7,7 @@
 #include <unordered_map>
 
 int main() {
-  initializeLogger("gcp.log");
+  initializeLogger("/var/log/gcp/gcp.log");
   logger("Starting GCP");
   readConfig();
 
