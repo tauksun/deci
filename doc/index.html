@@ -4,148 +4,261 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DECI – Distributed Eventually Consistent In-Memory Cache</title>
-  <meta name="description" content="DECI: Distributed Eventually Consistent In-Memory Cache. Fast, local cache with global eventual consistency for microservices.">
+  <meta name="description" content="DECI: Distributed Eventually Consistent In-Memory Cache. Fast, local & global cache eventual consistency for microservices.">
   <style>
+    :root {
+      --bg: #f5f7fb;
+      --bg-panel: #ffffff;
+      --accent: #2563eb;
+      --text-main: #111827;
+      --text-sub: #4b5563;
+      --border-soft: #e5e7eb;
+    }
+    * { box-sizing: border-box; }
     body {
-      font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
       margin: 0;
-      padding: 0;
-      background: #fafbfc;
-      color: #222;
+      font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .layout {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Sidebar (desktop) */
+    .sidebar {
+      width: 230px;
+      background: #020617;
+      color: #e5e7eb;
+      display: flex;
+      flex-direction: column;
+      padding: 1.5rem 1.2rem;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+    }
+    .brand {
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      font-size: .8rem;
+      margin-bottom: .15rem;
+      color: #9ca3af;
+    }
+    .brand-main {
+      font-size: 1.3rem;
+      font-weight: 600;
+      margin-bottom: 1.6rem;
+      color: #f9fafb;
+    }
+    .nav-title {
+      font-size: .78rem;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      margin: 1.5rem 0 .4rem 0;
+      color: #6b7280;
+    }
+    .nav-link {
+      display: block;
+      padding: .45rem .4rem;
+      font-size: .9rem;
+      border-radius: .4rem;
+      color: #e5e7eb;
+    }
+    .nav-link:hover {
+      background: rgba(55,65,81,.7);
+    }
+    .sidebar-footer {
+      margin-top: auto;
+      font-size: .8rem;
+      color: #6b7280;
+    }
+
+    /* Mobile header (simple bar) */
+    .mobile-header {
+      display: none;
+      width: 100%;
+      background: #020617;
+      color: #e5e7eb;
+      text-align: center;
+      padding: .7rem 0;
+      font-weight: 600;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      font-size: .84rem;
+    }
+
+    /* Main content */
+    main {
+      flex: 1;
+      padding: 1.8rem 1.4rem 2.4rem 1.4rem;
     }
     header {
-      background: #2574A9;
-      color: #fff;
-      padding: 2rem 1rem 1rem 1rem;
-      text-align: center;
+      margin-bottom: 1.8rem;
     }
     header h1 {
-      margin: 0 0 .5rem 0;
-      font-size: 2.5rem;
-      letter-spacing: 2px;
+      margin: 0 0 .4rem 0;
+      font-size: 2rem;
     }
     header p {
-      margin: .5rem 0 0 0;
-      font-size: 1.2rem;
+      margin: 0;
+      color: var(--text-sub);
+      font-size: .98rem;
     }
-    main {
-      max-width: 920px;
-      margin: 2rem auto;
-      padding: 1rem;
-      background: #fff;
-      border-radius: 18px;
-      box-shadow: 0 2px 10px 0 rgba(80,100,120,0.06);
-    }
+
     section {
-      margin-bottom: 2.5rem;
+      margin-bottom: 2.3rem;
+      padding: 1.3rem 1.2rem 1.4rem 1.2rem;
+      background: var(--bg-panel);
+      border-radius: 14px;
+      border: 1px solid var(--border-soft);
+      box-shadow: 0 1px 3px rgba(15,23,42,0.05);
     }
-    h2 {
-      color: #207492;
-      font-size: 1.5rem;
-      margin-top: 1.5rem;
-      margin-bottom: .75rem;
+    section h2 {
+      margin-top: 0;
+      font-size: 1.25rem;
+      margin-bottom: .6rem;
     }
-    img, svg {
+    p { font-size: .95rem; line-height: 1.55; }
+    ul { margin-top: .4rem; padding-left: 1.2rem; }
+    li { font-size: .94rem; margin-bottom: .25rem; }
+
+    img {
       max-width: 100%;
-      height: auto;
       border-radius: 10px;
-      margin: 1rem 0;
-      box-shadow: 0 1px 6px 0 rgba(32,50,100,0.09);
+      margin: .9rem 0;
     }
     .diagram-caption {
       text-align: center;
-      font-size: .97rem;
-      color: #555;
-      margin-top: -10px;
-      margin-bottom: 16px;
+      font-size: .86rem;
+      color: var(--text-sub);
+      margin-top: -.4rem;
+      margin-bottom: .3rem;
     }
-    ul, ol {
-      margin-left: 1.3rem;
+
+    .two-col {
+      display: grid;
+      grid-template-columns: minmax(0,1.3fr) minmax(0,1fr);
+      gap: 1.1rem;
+      align-items: center; /* center text and image vertically */
     }
-    .github-link {
-      text-align: center;
-      margin: 2.5rem auto 2.2rem auto;
+    .two-col .col-text {
+      max-width: 34rem;
     }
-    .github-link a {
-      display: inline-block;
-      background: #24292e;
-      color: #fff;
-      padding: .65rem 1.4rem;
-      border-radius: 24px;
-      font-size: 1rem;
+
+    .ecosystem {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 1rem;
+      margin: 1.4rem 0 2.4rem 0;
+    }
+    .eco-card {
+      border-radius: 14px;
+      padding: 1rem 1.1rem;
+      background: #f5f7fb;
+      box-shadow: 0 1px 6px rgba(40,60,120,0.06);
+      border: 1px solid var(--border-soft);
+    }
+    .eco-title {
+      font-weight: 600;
+      margin-bottom: .4rem;
+      color: #1f4768;
+    }
+    .eco-sub {
+      font-size: .93rem;
+      color: var(--text-sub);
+      margin-top: .3rem;
+    }
+    .eco-link {
+      display: inline-flex;
+      align-items: center;
+      margin-top: .55rem;
+      font-size: .95rem;
+      color: #205a8a;
       text-decoration: none;
-      box-shadow: 0 2px 12px 0 rgba(32,50,100,0.08);
-      transition: background .2s;
     }
-    .github-link a:hover {
-      background: #264b7d;
-      color: #fff;
+    .eco-link svg {
+      margin-right: .4rem;
     }
+    .eco-link:hover {
+      color: #1486d6;
+    }
+
     .docker-section {
       background: #eff7fb;
-      border-radius: 14px;
-      padding: 1.2rem 1rem 1.7rem 1.2rem;
-      box-shadow: 0 1px 5px 0 rgba(70,100,160,0.04);
-      margin-bottom: 2rem;
     }
     .docker-section h3 {
-      color: #207492;
-      font-size: 1.23rem;
-      margin-top: 1.3rem;
-      margin-bottom: .6rem;
-    }
-    .docker-section a {
-      color: #206080;
-      text-decoration: underline;
-      transition: color .2s;
-    }
-    .docker-section a:hover {
-      color: #19a6e6;
+      font-size: 1rem;
+      margin-top: .9rem;
+      margin-bottom: .15rem;
     }
     .run-container {
       position: relative;
-      margin-bottom: 1.3em;
+      margin: .45rem 0 .8rem 0;
     }
     .run-cmd {
-      background: #222;
-      color: #fff;
-      font-size: 1rem;
-      border-radius: 6px;
-      padding: .8rem 1rem;
-      font-family: 'Fira Mono', 'Consolas', 'Menlo', 'monospace';
+      background: #020617;
+      color: #e5e7eb;
+      border-radius: 8px;
+      padding: .7rem .9rem;
+      font-family: 'Fira Mono','Consolas','Menlo',monospace;
+      font-size: .85rem;
       white-space: pre-line;
-      word-break: break-all;
-      margin: 0;
       overflow-x: auto;
     }
     .copy-btn {
       position: absolute;
-      top: 8px;
-      right: 10px;
-      background: #207492;
+      top: 7px;
+      right: 7px;
+      background: var(--accent);
       color: #fff;
       border: none;
-      outline: none;
-      border-radius: 20px;
-      padding: 6px 14px;
-      font-size: .95rem;
+      border-radius: 999px;
+      padding: .25rem .7rem;
+      font-size: .8rem;
       cursor: pointer;
-      box-shadow: 0 1px 5px 0 rgba(32,60,100,0.07);
-      transition: background .18s;
     }
-    .copy-btn:hover {
-      background: #264b7d;
+    .copy-btn:hover { background: #1e40af; }
+
+    code {
+      background: #e5e7eb;
+      border-radius: 4px;
+      padding: 0 .3rem;
+      font-size: .86rem;
     }
-    @media (max-width: 600px) {
-      main { padding: .3rem; }
-      header h1 { font-size: 1.5rem; }
-      .github-link a { font-size: .99rem; }
-    }
+
     .footer {
       text-align: center;
       color: #888;
       padding: 1.5rem 0 .7rem 0;
       font-size: .97rem;
+    }
+
+    /* Mobile adjustments */
+    @media (max-width: 900px) {
+      .layout {
+        flex-direction: column;
+      }
+      .sidebar {
+        display: none; /* hide full sidebar on mobile */
+      }
+      .mobile-header {
+        display: block; /* show simple centered header */
+      }
+      main {
+        padding: 1.1rem .9rem 2rem .9rem;
+      }
+      .two-col {
+        grid-template-columns: minmax(0,1fr); /* stack text and image */
+      }
+    }
+
+    @media (max-width: 600px) {
+      header h1 { font-size: 1.6rem; }
     }
   </style>
   <script>
@@ -153,114 +266,231 @@
       var text = document.getElementById(id).innerText;
       navigator.clipboard.writeText(text);
       btn.innerText = "Copied!";
-      setTimeout(() => { btn.innerText = "Copy"; }, 1400);
+      setTimeout(() => { btn.innerText = "Copy"; }, 1200);
     }
   </script>
 </head>
 <body>
-<header>
-  <h1>DECI – Distributed Eventually Consistent In-Memory Cache</h1>
-  <p>Ultra-fast, local cache with eventual consistency for microservices.</p>
-</header>
-<main>
-  <section>
-    <h2>Why DECI?</h2>
-    <p>
-      Traditional microservice architectures often place a cache service on a separate server (like Elasticache), requiring each microservice to make network calls for cache operations. These network calls increase latency and undermine the speed benefits of in-memory caching.
-    </p>
+<div class="mobile-header">DECI</div>
+<div class="layout">
+  <aside class="sidebar">
     <div>
-      <img src="current-approach.svg" alt="Traditional approach: remote cache accessed via network">
-      <div class="diagram-caption">Traditional approach: Microservices access remote cache over the network, introducing latency.</div>
+      <div class="brand-main">DECI</div>
     </div>
-    <p>
-      <b>DECI</b> (Distributed Eventually Consistent In-Memory Cache) flips this paradigm: it keeps the cache directly alongside the application process on the same machine, truly leveraging the speed and efficiency of local memory.
-    </p>
-  </section>
+    <div class="nav-title">Sections</div>
+    <div class="sidebar-nav">
+      <a class="nav-link" href="#why">Why DECI</a>
+      <a class="nav-link" href="#how">Architecture</a>
+      <a class="nav-link" href="#ecosystem">Ecosystem</a>
+      <a class="nav-link" href="#build">Build &amp; Run</a>
+    </div>
+    <div class="sidebar-footer">
+      &copy; 2025 DECI
+    </div>
+  </aside>
 
-  <section>
-    <h2>How DECI Works</h2>
-    <p>
-      For each microservice instance, a dedicated <strong>LCP</strong> (<b>L</b>ocal <b>C</b>ache <b>P</b>rocess) runs on the same server. The application communicates with the LCP via a fast UNIX socket, keeping cache access local and ultra-fast.
-    </p>
-    <div>
+  <main>
+    <header>
+      <h1>Distributed Eventually Consistent In‑Memory Cache</h1>
+      <p>Keep cache access local and fast, while synchronizing data across service instances.</p>
+    </header>
+
+    <!-- Why DECI -->
+    <section id="why">
+      <h2>Why DECI?</h2>
+      <div class="two-col">
+        <div class="col-text">
+          <p>
+            Traditional microservice architectures often place a cache service on a separate server (like Elasticache),
+            requiring each application instance to make network calls for cache operations. These network calls increase latency
+            and undermine the speed benefits of in‑memory caching.
+          </p>
+          <p>
+            <b>DECI</b> (Distributed Eventually Consistent In‑Memory Cache) flips this paradigm:
+            it keeps the cache directly alongside the application process on the same machine,
+            truly leveraging the speed and efficiency of local memory.
+          </p>
+        </div>
+        <div>
+          <img src="current-approach.svg" alt="Traditional approach: remote cache accessed via network">
+          <div class="diagram-caption">Traditional approach: microservices call a remote cache over the network, adding latency.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Architecture -->
+    <section id="how">
+      <h2>How DECI Works</h2>
+      <p>
+        For each application instance, a dedicated <strong>LCP</strong> (<b>L</b>ocal <b>C</b>ache <b>P</b>rocess)
+        runs on the same server. The application communicates with the LCP via a fast UNIX socket, keeping cache access local and ultra-fast.
+      </p>
       <img src="App-LCP.svg" alt="Local Cache Process and Application Process">
       <div class="diagram-caption">Each server runs an LCP, and the application accesses the cache locally via a UNIX socket.</div>
-    </div>
-  </section>
-  
-  <section>
-    <h2>Overview Diagram</h2>
-    <div>
+
+      <p style="margin-top:.7rem;">
+        A central <strong>GCP</strong> (<b>G</b>lobal <b>C</b>ache <b>P</b>rocess) maintains a global cache ( like the traditional cache system accessible via network call ) and acts as the synchronizer.
+        LCPs synchronize their local updates with GCP, which fans out changes to peer LCPs, keeping caches eventually consistent.
+      </p>
       <img src="LCP-GCP-basic.svg" alt="LCP and GCP interaction diagram">
-      <div class="diagram-caption">LCP provides fast local caching. GCP maintains a global cache accessed by LCPs via network.</div>
-    </div>
-  </section>
-  
-  <section>
-    <h2>Distributed Synchronization and Global Cache</h2>
-    <p>
-      DECI introduces the <strong>GCP</strong> (<b>G</b>lobal <b>C</b>ache <b>P</b>rocess), which runs on another server. GCP maintains a global cache accessible by all LCPs. When the application modifies its local cache (using the LCP), changes are sent to the GCP, which then synchronizes these updates across peer LCPs of the same microservice, ensuring eventual consistency.
-    </p>
-    <div>
+      <div class="diagram-caption">LCP provides fast local caching. GCP maintains a global cache accessed by LCPs via network and acts as the synchronizer.</div>
+
+      <p style="margin-top:.7rem;">
+        Each micro-service creates its own group in GCP. All LCP instances for that service join the group.
+        Any create, update, or delete performed by one instance is propagated to peers through GCP.
+      </p>
       <img src="LCP-GCP.svg" alt="LCP and GCP connections">
-      <div class="diagram-caption">LCPs use a pool of TCP connections to communicate with GCP for global cache access and synchronization.</div>
-    </div>
-  </section>
-  <section>
-    <h2>Synchronization in Microservices</h2>
-    <p>
-      Each micro-service creates its own group in GCP. All LCP instances of that micro-service join the group. Any create, update, or delete in the LCP’s local cache is propagated via GCP to all the other LCPs in the group, ensuring eventual consistency across all instances.
-    </p>
-    <div>
+      <div class="diagram-caption">LCPs maintain a pool of TCP connections to GCP for synchronization and global cache access.</div>
+
       <img src="Sync.svg" alt="Synchronization architecture in DECI">
-      <div class="diagram-caption">All LCPs of a service synchronize changes through GCP, keeping caches eventually consistent.</div>
-    </div>
-    <ul>
-      <li><b>Low Latency:</b> Cache operations happen in-memory, on the local server.</li>
-      <li><b>Scalable:</b> Each application instance and LCP is independent, scaling horizontally.</li>
-      <li><b>Eventual Consistency:</b> GCP ensures all peers see updated data after local changes.</li>
-      <li><b>Minimal Network Overhead:</b> Only synchronization and global cache queries go over the network.</li>
-      <li><b>Persistence and Recovery:</b> GCP maintains a WAL (Write-Ahead Log) file for each group, which is streamed to any newly joined LCP to bring it up-to-date with the current cache state.</li>
-    </ul>
-  </section>
-  <div class="github-link">
-    <a href="https://github.com/tauksun/deci" target="_blank" rel="noopener">View Source on GitHub</a>
-  </div>
-  <section class="docker-section">
-    <h2>Running DECI</h2>
-    <h3>Global Cache Process (GCP)</h3>
-    <p>
-      Docker Image: <a href="https://hub.docker.com/r/tauksun/deci-gcp" target="_blank">tauksun/deci-gcp</a>
-    </p>
-    <div class="run-container">
-      <pre class="run-cmd" id="gcp-cmd">sudo docker run --name gcp -v /tmp/gcp:/tmp/gcp -v /tmp/gcp/gcp.conf:/app/gcp.conf -e TARGET=gcp -p 7480:7480 tauksun/deci-gcp</pre>
-      <button class="copy-btn" onclick="copyToClipboard('gcp-cmd', this)">Copy</button>
-    </div>
-    <h3>Local Cache Process (LCP)</h3>
-    <p>
-      Docker Image: <a href="https://hub.docker.com/r/tauksun/deci-lcp" target="_blank">tauksun/deci-lcp</a>
-    </p>
-    <div class="run-container">
-      <pre class="run-cmd" id="lcp-cmd">sudo docker run -u $(id -u):$(id -g) -e USER_ID=$(id -u) -e GROUP_ID=$(id -g) --name lcp -v /tmp/lcp:/tmp/lcp -v /tmp/lcp/lcp.conf:/app/lcp.conf -e TARGET=lcp --network=host tauksun/deci-lcp</pre>
-      <button class="copy-btn" onclick="copyToClipboard('lcp-cmd', this)">Copy</button>
-    </div>
-    <p>
-      Adjust volume mounts and environment variables as per your environment and cache configuration.
-    </p>
-  </section>
-  <section>
-    <h2>Upcoming Release</h2>
-    <ul>
-      <li>Documentation</li>
-      <li>LCP shutdown handling</li>
-      <li>Stateful incremental parser</li>
-      <li>TTL implementation</li>
-      <li>SSL</li>
-    </ul>
-  </section>
-</main>
-<div class="footer">
-  &copy; 2025 DECI Project. Simple. Fast. Consistent. — Powered by Open Source.
+      <div class="diagram-caption">Groups in GCP keep LCPs for the same service synchronized</div>
+
+      <ul>
+        <li><b>Low Latency:</b> Cache operations happen in-memory, on the same machine.</li>
+        <li><b>Scalable:</b> Each application instance and LCP is independent, scaling horizontally.</li>
+        <li><b>Eventual Consistency:</b> GCP ensures all peers see updated data after local changes.</li>
+        <li><b>Minimal Network Overhead:</b> Only synchronization and global cache queries go over the network.</li>
+        <li><b>Persistence and Recovery:</b> GCP maintains a WAL (Write-Ahead Log) for each group, which is streamed to new LCPs so they can catch up.</li>
+      </ul>
+    </section>
+
+    <!-- Ecosystem -->
+    <section id="ecosystem">
+      <h2>DECI Ecosystem</h2>
+      <div class="ecosystem">
+        <div class="eco-card">
+          <div class="eco-title">Open Source Core</div>
+          <p class="eco-sub">
+            Explore the full DECI implementation, and design in the GitHub repository.
+          </p>
+          <a class="eco-link" href="https://github.com/tauksun/deci" target="_blank" rel="noopener">
+            <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+                0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52
+                -.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64
+                -.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18
+                1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82
+                1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.19 0
+                .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
+            <span>tauksun/deci</span>
+          </a>
+        </div>
+
+        <div class="eco-card">
+          <div class="eco-title">Docker Images</div>
+          <p class="eco-sub">
+            Run DECI components as containers. GCP hosts the global cache, while LCP runs alongside each service instance on the same host.
+          </p>
+          <p class="eco-sub">
+            <b>GCP image:</b>
+            <a href="https://hub.docker.com/r/tauksun/deci-gcp" target="_blank" rel="noopener">tauksun/deci-gcp</a><br>
+            <b>LCP image:</b>
+            <a href="https://hub.docker.com/r/tauksun/deci-lcp" target="_blank" rel="noopener">tauksun/deci-lcp</a>
+          </p>
+        </div>
+
+        <div class="eco-card">
+          <div class="eco-title">Node.js Client</div>
+          <p class="eco-sub">
+            Connect your Node.js services to the local LCP using the <code>deci</code> client.
+            It manages the UNIX socket and connection pool.
+          </p>
+          <p class="eco-sub">
+            <a href="https://www.npmjs.com/package/deci" target="_blank" rel="noopener">npm · deci</a><br>
+            Install with <code>npm install deci</code>
+          </p>
+          <p class="eco-sub" style="margin-top:.6rem;">
+            Client libraries for other languages are coming soon.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Run as containers -->
+    <section class="docker-section">
+      <h2>Run as Containers</h2>
+      <h3>Global Cache Process (GCP)</h3>
+      <div class="run-container">
+        <pre class="run-cmd" id="gcp-cmd">docker run --name gcp -d -v /tmp/gcp/log:/var/log/gcp -v /tmp/gcp/wal:/var/lib/gcp -p 7480:7480 tauksun/deci-gcp</pre>
+        <button class="copy-btn" onclick="copyToClipboard('gcp-cmd', this)">Copy</button>
+      </div>
+
+      <h3>Local Cache Process (LCP)</h3>
+      <div class="run-container">
+        <pre class="run-cmd" id="lcp-cmd">docker run --name lcp -u $(id -u):$(id -g) -e USER_ID=$(id -u) -e GROUP_ID=$(id -g) -v /tmp:/tmp -v /tmp/lcp/log:/var/log/lcp --network=host tauksun/deci-lcp</pre>
+        <button class="copy-btn" onclick="copyToClipboard('lcp-cmd', this)">Copy</button>
+      </div>
+      <div class="eco-sub">
+      <p>
+        Adjust volume mounts and environment variables as per your environment and cache configuration. 
+        <br>
+        Checkout more at : 
+      </p>
+      <p>
+        Docker Image: <a href="https://hub.docker.com/r/tauksun/deci-gcp" target="_blank" rel="noopener">tauksun/deci-gcp</a>
+      </p>
+      <p>
+        Docker Image: <a href="https://hub.docker.com/r/tauksun/deci-lcp" target="_blank" rel="noopener">tauksun/deci-lcp</a>
+      </p>
+      </div>
+    </section>
+
+    <!-- Build from source -->
+    <section id="build" class="docker-section">
+      <h2>Build from Source</h2>
+      <p>
+        Source code:
+        <a href="https://github.com/tauksun/deci" target="_blank" rel="noopener">github.com/tauksun/deci</a>
+      </p>
+      <p class="eco-sub">
+        Example build steps on Ubuntu (adjust packages and commands as needed for your distribution):
+      </p>
+      <div class="run-container">
+        <pre class="run-cmd" id="build-cmd">sudo apt-get update
+sudo apt-get install -y build-essential clang make
+
+# Clone and build
+git clone https://github.com/tauksun/deci.git
+cd deci
+
+# Build GCP
+make gcp
+
+# Build LCP
+make lcp</pre>
+        <button class="copy-btn" onclick="copyToClipboard('build-cmd', this)">Copy</button>
+      </div>
+
+      <h3>Example configuration files</h3>
+      <p class="eco-sub"><b>gcp.conf</b></p>
+      <div class="run-container">
+        <pre class="run-cmd" id="gcp-conf">MAX_CONNECTIONS = 1000
+MAX_READ_BYTES = 1023
+MAX_WRITE_BYTES = 1023
+SERVER_PORT = 7480</pre>
+        <button class="copy-btn" onclick="copyToClipboard('gcp-conf', this)">Copy</button>
+      </div>
+
+      <p class="eco-sub"><b>lcp.conf</b></p>
+      <div class="run-container">
+        <pre class="run-cmd" id="lcp-conf">GROUP = deci # GCP Group Name
+MAX_CONNECTIONS = 100
+LCP = lcp # LCP Name
+sock = /tmp/lcp.sock
+SOCKET_REUSE = 1
+MAX_READ_BYTES = 1023
+MAX_WRITE_BYTES = 1023
+healthUpdateTime = 3 # Seconds
+MAX_SYNC_MESSAGES = 100
+MAX_SYNC_CONNECTIONS = 100 # Receiving sync operations from GCP
+GCP_SERVER_IP = 127.0.0.1
+GCP_SERVER_PORT = 7480
+MAX_GCP_CONNECTIONS = 100</pre>
+        <button class="copy-btn" onclick="copyToClipboard('lcp-conf', this)">Copy</button>
+      </div>
+    </section>
+  </main>
 </div>
 </body>
 </html>

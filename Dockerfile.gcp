@@ -6,7 +6,6 @@ RUN apt-get update && \
     apt-get install -y make gcc g++ clang bash && \
     rm -rf /var/lib/apt/lists/*
     
-ARG TARGET
 WORKDIR /app
 
 # Copy source code and Makefile
@@ -15,16 +14,21 @@ COPY Makefile /app
 
 # Create build directory and compile
 RUN mkdir -p /app/build
-COPY ./build/${TARGET}.conf /app/build/
-RUN make ${TARGET}
+COPY ./build/gcp.conf /app/build/
+RUN make gcp
 
 # Package (runtime) Stage
 FROM ubuntu:22.04 AS runtime
 
 WORKDIR /app
 
-ARG TARGET=${TARGET}
-COPY --from=builder /app/build/${TARGET} /app/${TARGET}
-COPY --from=builder /app/build/${TARGET}.conf /app/${TARGET}.conf
+# Create dirs for logs, wal file, configuration file
+RUN mkdir -p /var/log/gcp
+RUN mkdir -p /var/lib/gcp
+RUN mkdir -p /etc/gcp
 
-ENTRYPOINT ["/bin/bash", "-c", "/app/${TARGET}"]
+COPY --from=builder /app/build/gcp /app/gcp
+COPY --from=builder /app/build/gcp.conf /etc/gcp/gcp.conf
+
+ENTRYPOINT ["/app/gcp"]
+

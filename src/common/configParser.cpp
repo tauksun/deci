@@ -137,10 +137,10 @@ void createConfig(I_CONFIG &configuration) {
   unordered_map<string, function<void(const string &)>> *setters;
 
   if (configuration.type == "lcp") {
-    file = "lcp.conf";
+    file = "/etc/lcp/lcp.conf";
     setters = &lcp_setters;
   } else if (configuration.type == "gcp") {
-    file = "gcp.conf";
+    file = "/etc/gcp/gcp.conf";
     setters = &gcp_setters;
   }
 

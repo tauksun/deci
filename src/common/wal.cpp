@@ -1,8 +1,12 @@
 #include "wal.hpp"
 #include "logger.hpp"
+#include <string>
 #include <unistd.h>
 
-std::string generateWalFileName(std::string &group) { return group + ".wal"; }
+std::string generateWalFileName(std::string &group) {
+  std::string location = "/var/lib/gcp/";
+  return location + group + ".wal";
+}
 
 int writeSync(std::string &response, int connSock) {
   int writtenBytes = 0;
