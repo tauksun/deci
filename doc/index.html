@@ -284,9 +284,6 @@
       <a class="nav-link" href="#ecosystem">Ecosystem</a>
       <a class="nav-link" href="#build">Build &amp; Run</a>
     </div>
-    <div class="sidebar-footer">
-      &copy; 2025 DECI
-    </div>
   </aside>
 
   <main>
@@ -332,6 +329,8 @@
         A central <strong>GCP</strong> (<b>G</b>lobal <b>C</b>ache <b>P</b>rocess) maintains a global cache ( like the traditional cache system accessible via network call ) and acts as the synchronizer.
         LCPs synchronize their local updates with GCP, which fans out changes to peer LCPs, keeping caches eventually consistent.
       </p>
+
+      <p style="margin-top:.7rem;">Global cache can be used for huge data, or for shared data required by multiple microservices.</p>
       <img src="LCP-GCP-basic.svg" alt="LCP and GCP interaction diagram">
       <div class="diagram-caption">LCP provides fast local caching. GCP maintains a global cache accessed by LCPs via network and acts as the synchronizer.</div>
 
