@@ -3,7 +3,6 @@
 
 // sample messages
 //
-// *4\r\n$3\r\nSET\r\n$4\r\nName\r\n$5\r\nChiba\r\n:1\r\n
 // *2\r\n$3\r\nGET\r\n$4\r\nName\r\n
 // *2\r\n$4\r\nGGET\r\n$4\r\nName\r\n
 
@@ -152,11 +151,19 @@ DecodedMessage decoder(string &str, bool extractLen) {
     }
     offset++;
 
+    if (len < offset + 1) {
+      msg.error.partial = true;
+      return msg;
+    }
     msg.flag.sync = stoi(&str[offset]);
     count++;
 
     // Used during applying WAL
     if (extractLen) {
+      if (len < offset + 3) {
+        msg.error.partial = true;
+        return msg;
+      }
       msg.messageLength = offset + 3;
     }
 
@@ -232,11 +239,19 @@ DecodedMessage decoder(string &str, bool extractLen) {
     }
     offset++;
 
+    if (len < offset + 1) {
+      msg.error.partial = true;
+      return msg;
+    }
     msg.flag.sync = stoi(&str[offset]);
     count++;
 
     // Used during applying WAL
     if (extractLen) {
+      if (len < offset + 3) {
+        msg.error.partial = true;
+        return msg;
+      }
       msg.messageLength = offset + 3;
     }
   } else if (op == "GSET") {
