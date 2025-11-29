@@ -62,7 +62,9 @@ Connect your Node.js services to the local LCP using the `deci` client. It manag
 
 Install:
 
-``` npm install deci ```
+```
+npm install deci
+```
 
 Client libraries for other languages are coming soon.
 
@@ -72,11 +74,15 @@ Client libraries for other languages are coming soon.
 
 ### Global Cache Process (GCP)
 
-``` docker run --name gcp -d -v /tmp/gcp/log:/var/log/gcp -v /tmp/gcp/wal:/var/lib/gcp -p 7480:7480 tauksun/deci-gcp ```
+```
+docker run --name gcp -d -v /tmp/gcp/log:/var/log/gcp -v /tmp/gcp/wal:/var/lib/gcp -p 7480:7480 tauksun/deci-gcp 
+```
 
 ### Local Cache Process (LCP)
 
-``` docker run --name lcp -u $(id -u):$(id -g) -e USER_ID=$(id -u) -e GROUP_ID=$(id -g) -v /tmp:/tmp -v /tmp/lcp/log:/var/log/lcp --network=host tauksun/deci-lcp```
+```
+docker run --name lcp -u $(id -u):$(id -g) -e USER_ID=$(id -u) -e GROUP_ID=$(id -g) -v /tmp:/tmp -v /tmp/lcp/log:/var/log/lcp --network=host tauksun/deci-lcp
+```
 
 Adjust volume mounts and environment variables as per your environment and cache configuration.
 
@@ -103,9 +109,8 @@ Build GCP
 make gcp
 
 Build LCP
-make lcp
-
-
+make lcp 
+```
 
 ### Example configuration files
 
@@ -119,6 +124,7 @@ SERVER_PORT = 7480
 ```
 
 #### `lcp.conf`
+
 ```
 GROUP = deci # GCP Group Name
 MAX_CONNECTIONS = 100
@@ -132,12 +138,12 @@ MAX_SYNC_MESSAGES = 100
 MAX_SYNC_CONNECTIONS = 100 # Receiving sync operations from GCP
 GCP_SERVER_IP = 127.0.0.1
 GCP_SERVER_PORT = 7480
-MAX_GCP_CONNECTIONS = 100
+MAX_GCP_CONNECTIONS = 100 
 ```
 
 ## Project Status
 
-Alpha – actively developed and being polished for external adoption.
+Alpha – actively developed.
 
 ---
 
