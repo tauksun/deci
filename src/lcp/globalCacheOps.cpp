@@ -23,7 +23,10 @@ std::deque<int> connectionPool;
 std::unordered_map<int, int> socketReqResMap;
 std::unordered_map<int, time_t> timeMap;
 std::unordered_set<int> activeConnections;
+std::unordered_map<int, time_t> newConnAndPingTimeoutMap;
+
 int epollFd;
+int pingTimerFdValue;
 string lcpID;
 
 void onConnectionClose(int);
@@ -32,7 +35,8 @@ void registerConnection(int);
 void epollIO(int epollFd, struct epoll_event *events,
              std::deque<ReadSocketMessage> &readSocketQueue, int timeout,
              int globalCacheThreadEventFd, int timerFd,
-             bool &poolHealthCheckEvent) {
+             bool &poolHealthCheckEvent, int pingTimerFd,
+             bool &newConnAndPingHealthCheckEvent) {
   logger("globalCacheOps thread : In epollIO");
   int readyFds =
       epoll_wait(epollFd, events, configLCP.MAX_GCP_CONNECTIONS, timeout);
@@ -47,11 +51,16 @@ void epollIO(int epollFd, struct epoll_event *events,
     int fd = events[n].data.fd;
     uint32_t ev = events[n].events;
 
-    if (fd == globalCacheThreadEventFd || fd == timerFd) {
+    if (fd == globalCacheThreadEventFd || fd == timerFd || fd == pingTimerFd) {
 
       if (fd == timerFd) {
         logger("globalCacheOps thread : timerFd is ready");
         poolHealthCheckEvent = true;
+      }
+
+      if (fd == pingTimerFd) {
+        logger("globalCacheOps thread : pingTimerFd is ready");
+        newConnAndPingHealthCheckEvent = true;
       }
 
       logger("globalCacheOps thread : Reading from fd");
@@ -176,6 +185,12 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
             "globalCacheOps thread : Removing from activeConnections : conn : ",
             msg.fd);
         activeConnections.erase(msg.fd);
+
+        // This is irrelevant for normal queries
+        logger("globalCacheOps thread : Removing from newConnAndPingTimeoutMap "
+               ": conn : ",
+               msg.fd);
+        newConnAndPingTimeoutMap.erase(msg.fd);
         logger("globalCacheOps thread : connectionPool size : ",
                connectionPool.size());
 
@@ -430,6 +445,34 @@ void asyncConnect() {
     }
 
     activeConnections.insert(connSockFd);
+    auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                   std::chrono::system_clock::now().time_since_epoch())
+                   .count();
+    newConnAndPingTimeoutMap[connSockFd] = now;
+  }
+
+  // Start timer for PING timeout
+  struct itimerspec pingTimerValue;
+  timespec now;
+  if (clock_gettime(CLOCK_MONOTONIC, &now) == -1) {
+    logger("globalCacheOps thread : Error while getting now");
+    perror("globalCacheOps thread : now");
+    // Don't throw error here
+    // Let further iterations handle this
+    return;
+  }
+
+  pingTimerValue.it_value.tv_sec = now.tv_sec + configLCP.PING_CHECK_INTERVAL;
+  pingTimerValue.it_interval.tv_sec =
+      0; // To be ran only one, after sending PING for all idle connections
+
+  logger("globalCacheOps thread : Alarming timer for ping timeouts");
+  if (timerfd_settime(pingTimerFdValue, TFD_TIMER_ABSTIME, &pingTimerValue,
+                      NULL) == -1) {
+    perror("globalCacheOps thread : timerfd_settime : pingTimerValue");
+    // Don't throw error here
+    // Let further iterations handle this
+    return;
   }
 }
 
@@ -477,7 +520,7 @@ void onConnectionClose(int conn) {
   asyncConnect();
 }
 
-void poolHealthCheck(int epollFd) {
+void poolHealthCheck() {
   logger("globalCacheOps thread : Checking pool health");
   // Loop over pool
 
@@ -527,8 +570,32 @@ void poolHealthCheck(int epollFd) {
       activeConnections.insert(conn);
       logger("globalCacheOps thread : added to activeConnections : conn : ",
              conn);
+
+      logger("globalCacheOps thread : adding to newConnAndPingTimeoutMap for "
+             "tracking "
+             "irresponsive PINGs : conn : ",
+             conn);
+      newConnAndPingTimeoutMap[conn] = now;
     } else {
       connectionPool.push_back(conn);
+    }
+  }
+}
+
+void newConnAndPingHealthCheck() {
+  // Close all irresponsive connections present in newConnAndPingTimeoutMap
+
+  auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                 std::chrono::system_clock::now().time_since_epoch())
+                 .count();
+  for (auto it = newConnAndPingTimeoutMap.begin();
+       it != newConnAndPingTimeoutMap.end();) {
+    if (now - it->second >= configLCP.PING_CHECK_INTERVAL * 1000) {
+      int fd = it->first;
+      it = newConnAndPingTimeoutMap.erase(it);
+      onConnectionClose(fd);
+    } else {
+      ++it;
     }
   }
 }
@@ -541,6 +608,7 @@ void globalCacheOps(
   std::deque<ReadSocketMessage> readSocketQueue;
   std::deque<WriteSocketMessage> writeSocketQueue;
   bool poolHealthCheckEvent = false;
+  bool newConnAndPingHealthCheckEvent = false;
   lcpID = lcpId;
 
   // Initialize epoll & add globalCacheThreadEventFd for monitoring
@@ -608,6 +676,26 @@ void globalCacheOps(
       "globalCacheOps thread : Asynchronously establish connections with GCP");
   asyncConnect();
 
+  int pingTimerFd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+  logger("globalCacheOps thread : pingTimerFd : ", pingTimerFd);
+
+  if (pingTimerFd == -1) {
+    perror("globalCacheOps thread : pingTimerFd");
+    exit(EXIT_FAILURE);
+  }
+
+  // Configure Edge triggered
+  logger("globalCacheOps thread : Add pingTimerFd for monitoring");
+  ev.events = EPOLLIN | EPOLLET;
+  ev.data.fd = pingTimerFd;
+
+  // Add pingTimerFd descriptor for monitoring
+  if (epoll_ctl(epollFd, EPOLL_CTL_ADD, pingTimerFd, &ev) == -1) {
+    perror("globalCacheOps thread : epoll_ctl pingTimerFd");
+    exit(EXIT_FAILURE);
+  }
+  pingTimerFdValue = pingTimerFd;
+
   /**
    * epoll_wait
    * readFromSocketQueue ( GCP response )
@@ -619,13 +707,20 @@ void globalCacheOps(
   logger("globalCacheOps thread : Starting eventLoop");
   while (1) {
     epollIO(epollFd, events, readSocketQueue, timeout, globalCacheThreadEventFd,
-            timerFd, poolHealthCheckEvent);
+            timerFd, poolHealthCheckEvent, pingTimerFd,
+            newConnAndPingHealthCheckEvent);
     readFromSocketQueue(readSocketQueue, writeSocketQueue);
     writeToApplicationSocket(writeSocketQueue);
     readFromConcurrentQueue(GlobalCacheOpsQueue);
+
     if (poolHealthCheckEvent) {
-      poolHealthCheck(epollFd);
+      poolHealthCheck();
       poolHealthCheckEvent = false;
+    }
+
+    if (newConnAndPingHealthCheckEvent) {
+      newConnAndPingHealthCheck();
+      newConnAndPingHealthCheckEvent = false;
     }
 
     if (readSocketQueue.size() || writeSocketQueue.size()) {
