@@ -309,6 +309,9 @@ void readFromConcurrentQueue(
                  "failed attempt : msg.fd : ",
                  msg.fd);
           close(msg.fd);
+        } else {
+          // Don't loose sync ops
+          GlobalCacheOpsQueue.enqueue(msg);
         }
         continue;
       }
@@ -321,6 +324,9 @@ void readFromConcurrentQueue(
                "failed attempt : msg.fd : ",
                msg.fd);
         close(msg.fd);
+      } else {
+        // Don't loose sync ops
+        GlobalCacheOpsQueue.enqueue(msg);
       }
       onConnectionClose(connSock);
       continue;
@@ -372,11 +378,6 @@ void registerConnection(int conn) {
 
   logger("globalCacheOps thread : adding connection : ", conn,
          " for monitoring by epoll");
-  if (makeSocketNonBlocking(conn) != 0) {
-    logger("globalCacheOps thread : makeSocketNonBlocking : conn : ", conn);
-    onConnectionClose(conn);
-    return;
-  }
 
   if (epoll_ctl(epollFd, EPOLL_CTL_ADD, conn, &ev) == -1) {
     perror("globalCacheOps thread : epoll_ctl : conn");
@@ -433,8 +434,8 @@ void asyncConnect() {
 }
 
 void onConnectionClose(int conn) {
-  // Remove from monitoring
 
+  // Remove from monitoring
   logger("globalCacheOps thread : In connectionClose for conn : ", conn);
   close(conn);
 
@@ -460,6 +461,17 @@ void onConnectionClose(int conn) {
   logger("globalCacheOps thread : Erasing from socketReqResMap : conn : ",
          conn);
   socketReqResMap.erase(conn);
+
+  // This is when GCP closes the connection
+  // For other scenarios, it will not be present in pool
+  auto it = connectionPool.begin();
+  for (int i = 0; i < connectionPool.size(); i++) {
+    if (connectionPool[i] == conn) {
+      connectionPool.erase(it);
+      break;
+    }
+    it++;
+  }
 
   // Connection Asynchronously
   asyncConnect();
