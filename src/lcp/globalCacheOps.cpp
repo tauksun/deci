@@ -516,6 +516,9 @@ void onConnectionClose(int conn) {
     it++;
   }
 
+  // Remove from newConnAndPingTimeoutMap
+  newConnAndPingTimeoutMap.erase(conn);
+
   // Connection Asynchronously
   asyncConnect();
 }
