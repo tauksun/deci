@@ -14,11 +14,14 @@ struct LCP_CONFIG {
   int MAX_WRITE_BYTES = 1023;
   int healthUpdateTime = 3; // Seconds
   unsigned long MAX_SYNC_MESSAGES = 100;
-  int MAX_SYNC_CONNECTIONS = 2; // Receiving sync operations from GCP
+  int MAX_SYNC_CONNECTIONS = 100; // Receiving sync operations from GCP
   string GCP_SERVER_IP = "127.0.0.1";
   int GCP_SERVER_PORT = 7480;
-  unsigned long MAX_GCP_CONNECTIONS = 2;
+  unsigned long MAX_GCP_CONNECTIONS = 100;
   unsigned long MAX_WAL_SYNC_MESSAGES = 100;
+  int CONNECTION_POOL_HEALTH_CHECK_INTERVAL = 30; // seconds
+  int IDLE_CONNECTION_TIME = 30000;               // milliseconds
+  int PING_CHECK_INTERVAL = 3; // seconds
 };
 
 struct GCP_CONFIG {

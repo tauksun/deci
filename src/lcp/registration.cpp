@@ -73,11 +73,7 @@ int lcpRegistration() {
   return 0;
 }
 
-int connectionRegistration(int connSockFd, string type, string lcpId) {
-  logger("Registration LCP connection with GCP, connSockFd: ", connSockFd,
-         " type : ", type);
-
-  // GREGISTRATION_CONNECTION groupName lcpName typeOfConnection
+vector<QueryArrayElement> connRegisterationMessage(string type, string lcpId) {
   vector<QueryArrayElement> registration;
 
   QueryArrayElement reg;
@@ -99,6 +95,17 @@ int connectionRegistration(int connSockFd, string type, string lcpId) {
   connectionType.value = type;
   connectionType.type = "string";
   registration.push_back(connectionType);
+
+  return registration;
+}
+
+int connectionRegistration(int connSockFd, string type, string lcpId) {
+  logger("Registration LCP connection with GCP, connSockFd: ", connSockFd,
+         " type : ", type);
+
+  // GREGISTRATION_CONNECTION groupName lcpName typeOfConnection
+  vector<QueryArrayElement> registration =
+      connRegisterationMessage(type, lcpId);
 
   string regQuery = encoder(registration);
 

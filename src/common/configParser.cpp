@@ -7,10 +7,6 @@
 
 using namespace std;
 
-// TODO:
-// Read lcp.config / gcp.config from the same directory as the binary for now
-// Change this to /usr/local/etc when working on package installer
-
 struct KeyValue {
   std::string key;
   std::string value;
@@ -112,7 +108,18 @@ void createConfig(I_CONFIG &configuration) {
        [&](const string &val) {
          (*configuration.lcp_config).GCP_SERVER_IP = val;
        }},
-  };
+      {"CONNECTION_POOL_HEALTH_CHECK_INTERVAL",
+       [&](const string &val) {
+         (*configuration.lcp_config).CONNECTION_POOL_HEALTH_CHECK_INTERVAL =
+             stoi(val);
+       }},
+      {"IDLE_CONNECTION_TIME",
+       [&](const string &val) {
+         (*configuration.lcp_config).IDLE_CONNECTION_TIME = stoi(val);
+       }},
+      {"PING_CHECK_INTERVAL", [&](const string &val) {
+         (*configuration.lcp_config).PING_CHECK_INTERVAL = stoi(val);
+       }}};
 
   unordered_map<string, function<void(const string &)>> gcp_setters = {
       {"MAX_CONNECTIONS",

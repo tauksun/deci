@@ -445,6 +445,8 @@ DecodedMessage decoder(string &str, bool extractLen) {
       offset += seekerLength + 2;
     }
 
+  } else if (op == "PING") {
+    return msg;
   } else {
     msg.error.invalid = true;
     return msg;
