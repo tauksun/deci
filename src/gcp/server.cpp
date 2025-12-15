@@ -306,7 +306,15 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
             response.response = encoder(&res, "integer");
             writeSocketQueue.push_back(response);
           }
-
+        } else if (parsed.operation == "PING") {
+          logger(
+              "Server : Queuing response for PING to writeSocketQueue, fd : ",
+              msg.fd);
+          string res = "1";
+          WriteSocketMessage response;
+          response.fd = msg.fd;
+          response.response = encoder(&res, "integer");
+          writeSocketQueue.push_back(response);
         } else {
           // Push to operation queue
           logger("Server : Pushing to operation queue, op : ",
