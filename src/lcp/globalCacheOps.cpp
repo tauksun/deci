@@ -9,6 +9,7 @@
 #include "connect.hpp"
 #include "registration.hpp"
 #include <asm-generic/socket.h>
+#include <cstring>
 #include <ctime>
 #include <deque>
 #include <sys/epoll.h>
@@ -27,7 +28,6 @@ std::unordered_map<int, time_t> newConnAndPingTimeoutMap;
 
 int epollFd;
 int pingTimerFdValue;
-struct itimerspec pingTimerValue;
 string lcpID;
 
 void onConnectionClose(int);
@@ -429,6 +429,9 @@ void startNewConnPingTimeout() {
     return;
   }
 
+  struct itimerspec pingTimerValue;
+  memset(&pingTimerValue, 0, sizeof(pingTimerValue));
+
   pingTimerValue.it_value.tv_sec = now.tv_sec + configLCP.PING_CHECK_INTERVAL;
   pingTimerValue.it_interval.tv_sec =
       0; // To be ran only one, after sending PING for all idle connections
@@ -668,6 +671,7 @@ void globalCacheOps(
     exit(EXIT_FAILURE);
   }
 
+  memset(&timerValue, 0, sizeof(timerValue));
   timerValue.it_value.tv_sec =
       now.tv_sec + configLCP.CONNECTION_POOL_HEALTH_CHECK_INTERVAL;
   timerValue.it_interval.tv_sec =
