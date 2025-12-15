@@ -21,6 +21,7 @@ struct LCP_CONFIG {
   unsigned long MAX_WAL_SYNC_MESSAGES = 100;
   int CONNECTION_POOL_HEALTH_CHECK_INTERVAL = 30; // seconds
   int IDLE_CONNECTION_TIME = 30000;               // milliseconds
+  int PING_CHECK_INTERVAL = 3; // seconds
 };
 
 struct GCP_CONFIG {

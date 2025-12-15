@@ -113,8 +113,12 @@ void createConfig(I_CONFIG &configuration) {
          (*configuration.lcp_config).CONNECTION_POOL_HEALTH_CHECK_INTERVAL =
              stoi(val);
        }},
-      {"IDLE_CONNECTION_TIME", [&](const string &val) {
+      {"IDLE_CONNECTION_TIME",
+       [&](const string &val) {
          (*configuration.lcp_config).IDLE_CONNECTION_TIME = stoi(val);
+       }},
+      {"PING_CHECK_INTERVAL", [&](const string &val) {
+         (*configuration.lcp_config).PING_CHECK_INTERVAL = stoi(val);
        }}};
 
   unordered_map<string, function<void(const string &)>> gcp_setters = {
