@@ -27,6 +27,7 @@ std::unordered_map<int, time_t> newConnAndPingTimeoutMap;
 
 int epollFd;
 int pingTimerFdValue;
+struct itimerspec pingTimerValue;
 string lcpID;
 
 void onConnectionClose(int);
@@ -414,6 +415,34 @@ void registerConnection(int conn) {
   }
 }
 
+void startNewConnPingTimeout() {
+  logger("globalCacheOps thread : In startNewConnPingTimeout");
+  // Start timer for PING timeout
+  logger("globalCacheOps thread : arming timer");
+
+  timespec now;
+  if (clock_gettime(CLOCK_MONOTONIC, &now) == -1) {
+    logger("globalCacheOps thread : Error while getting now");
+    perror("globalCacheOps thread : now");
+    // Don't throw error here
+    // Let another iteration handle this check
+    return;
+  }
+
+  pingTimerValue.it_value.tv_sec = now.tv_sec + configLCP.PING_CHECK_INTERVAL;
+  pingTimerValue.it_interval.tv_sec =
+      0; // To be ran only one, after sending PING for all idle connections
+
+  logger("globalCacheOps thread : pingTimerFdValue : ", pingTimerFdValue);
+  if (timerfd_settime(pingTimerFdValue, TFD_TIMER_ABSTIME, &pingTimerValue,
+                      NULL) == -1) {
+    perror("globalCacheOps thread : timerfd_settime : pingTimer");
+    // Don't throw error here
+    // Let further iterations handle this
+    return;
+  }
+}
+
 void asyncConnect() {
   while (activeConnections.size() + connectionPool.size() <
          configLCP.MAX_GCP_CONNECTIONS) {
@@ -451,45 +480,25 @@ void asyncConnect() {
     newConnAndPingTimeoutMap[connSockFd] = now;
   }
 
-  // Start timer for PING timeout
-  struct itimerspec pingTimerValue;
-  timespec now;
-  if (clock_gettime(CLOCK_MONOTONIC, &now) == -1) {
-    logger("globalCacheOps thread : Error while getting now");
-    perror("globalCacheOps thread : now");
-    // Don't throw error here
-    // Let further iterations handle this
-    return;
-  }
-
-  pingTimerValue.it_value.tv_sec = now.tv_sec + configLCP.PING_CHECK_INTERVAL;
-  pingTimerValue.it_interval.tv_sec =
-      0; // To be ran only one, after sending PING for all idle connections
-
-  logger("globalCacheOps thread : Alarming timer for ping timeouts");
-  if (timerfd_settime(pingTimerFdValue, TFD_TIMER_ABSTIME, &pingTimerValue,
-                      NULL) == -1) {
-    perror("globalCacheOps thread : timerfd_settime : pingTimerValue");
-    // Don't throw error here
-    // Let further iterations handle this
-    return;
-  }
+  logger("globalCacheOps thread : Starting new conn timeout");
+  startNewConnPingTimeout();
 }
 
 void onConnectionClose(int conn) {
 
   // Remove from monitoring
   logger("globalCacheOps thread : In connectionClose for conn : ", conn);
-  close(conn);
-
   logger("globalCacheOps thread : removing from epoll monitoring, conn : ",
          conn);
+
   if (epoll_ctl(epollFd, EPOLL_CTL_DEL, conn, nullptr) == -1) {
     logger("globalCacheOps thread : Error while removing from epoll "
            "monitoring, conn : ",
            conn);
     perror("globalCacheOps thread : Epoll_DEL");
   }
+
+  close(conn);
 
   // Remove from activeConnections
   logger("globalCacheOps thread : Removing from activeConnections : conn : ",
@@ -583,14 +592,21 @@ void poolHealthCheck() {
       connectionPool.push_back(conn);
     }
   }
+
+  logger("globalCacheOps thread : Starting PING timeout");
+  startNewConnPingTimeout();
 }
 
 void newConnAndPingHealthCheck() {
   // Close all irresponsive connections present in newConnAndPingTimeoutMap
 
+  logger("globalCacheOps thread : In newConnAndPingHealthCheck");
   auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
                  std::chrono::system_clock::now().time_since_epoch())
                  .count();
+
+  logger("globalCacheOps thread : now : ", now,
+         " newConnAndPingTimeoutMap size : ", newConnAndPingTimeoutMap.size());
   for (auto it = newConnAndPingTimeoutMap.begin();
        it != newConnAndPingTimeoutMap.end();) {
     if (now - it->second >= configLCP.PING_CHECK_INTERVAL * 1000) {
@@ -668,17 +684,13 @@ void globalCacheOps(
     exit(EXIT_FAILURE);
   }
 
-  logger("globalCacheOps thread : Alarming timer");
+  logger("globalCacheOps thread : arm timer");
   if (timerfd_settime(timerFd, TFD_TIMER_ABSTIME, &timerValue, NULL) == -1) {
     perror("globalCacheOps thread : timerfd_settime");
     exit(EXIT_FAILURE);
   }
 
-  // Establish connections with GCP Asynchronously
-  logger(
-      "globalCacheOps thread : Asynchronously establish connections with GCP");
-  asyncConnect();
-
+  logger("globalCacheOps thread : Configuring PING timer");
   int pingTimerFd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
   logger("globalCacheOps thread : pingTimerFd : ", pingTimerFd);
 
@@ -698,6 +710,11 @@ void globalCacheOps(
     exit(EXIT_FAILURE);
   }
   pingTimerFdValue = pingTimerFd;
+
+  // Establish connections with GCP Asynchronously
+  logger(
+      "globalCacheOps thread : Asynchronously establish connections with GCP");
+  asyncConnect();
 
   /**
    * epoll_wait
