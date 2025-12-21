@@ -38,6 +38,10 @@ DecodedResponse responseDecoder(string &response) {
       decodedResponse.error.partial = true;
       return decodedResponse;
     }
+
+    // Extract data
+    decodedResponse.data = to_string(len);
+    decodedResponse.dataType = "integer";
   }
   // _\r\n
   else if (type == '_') {

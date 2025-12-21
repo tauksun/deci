@@ -445,7 +445,8 @@ DecodedMessage decoder(string &str, bool extractLen) {
       offset += seekerLength + 2;
     }
 
-  } else if (op == "PING") {
+  } else if (op == "PING" || op == "SYNC_PING" ||
+             op == "SYNC_CONN_ESTABLISHED") {
     return msg;
   } else {
     msg.error.invalid = true;

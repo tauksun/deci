@@ -634,8 +634,8 @@ void globalCacheOps(
   lcpID = lcpId;
 
   // Initialize epoll & add globalCacheThreadEventFd for monitoring
-  // GCP connections + timerFd + eventFd
-  int maxEpollEvent = configLCP.MAX_GCP_CONNECTIONS + 2;
+  // GCP connections + timerFd + eventFd + pingTimerFd
+  int maxEpollEvent = configLCP.MAX_GCP_CONNECTIONS + 3;
   struct epoll_event ev, events[maxEpollEvent];
 
   epollFd = epoll_create1(0);
@@ -719,14 +719,6 @@ void globalCacheOps(
   logger(
       "globalCacheOps thread : Asynchronously establish connections with GCP");
   asyncConnect();
-
-  /**
-   * epoll_wait
-   * readFromSocketQueue ( GCP response )
-   * writeToApplicationSocket ( Application Global cache query response )
-   * readFromConcurrentQueue > check pool > if available : send to GCP > Add
-   * socketFd to socketReqResMap set timeout for epoll
-   * */
 
   logger("globalCacheOps thread : Starting eventLoop");
   while (1) {

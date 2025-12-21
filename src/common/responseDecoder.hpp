@@ -10,6 +10,8 @@ struct ResponseDecodeError {
 };
 
 struct DecodedResponse {
+  string data;
+  string dataType;
   ResponseDecodeError error;
 };
 
