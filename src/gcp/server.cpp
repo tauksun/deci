@@ -29,6 +29,16 @@ bool isSyncMessage(string &op) {
   return false;
 }
 
+int isPingMessage(DecodedMessage &msg) {
+  if (msg.operation == "SYNC_PING") {
+    // If operation is SYNC_PING return the number of required connections for
+    // this LCP as sent by LCP in sync message
+    // *2\r\n$9\r\nSYNC_PING\r\n:100\r\n
+    return stoi(msg.value);
+  }
+  return 0;
+}
+
 void epollIO(int epollFd, int socketFd, struct epoll_event &ev,
              struct epoll_event *events, int timeout,
              std::deque<ReadSocketMessage> &readSocketQueue) {
@@ -115,6 +125,8 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
   while (pos < currentSize) {
     char buf[1024];
     ReadSocketMessage msg = readSocketQueue.front();
+    readSocketQueue.pop_front();
+    pos++;
 
     int readBytes = read(msg.fd, buf, configGCP.MAX_READ_BYTES);
     if (readBytes == 0) {
@@ -161,7 +173,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
         logger("Server : Successfully parsed");
         drainSocketSync(msg.fd);
 
-        if (isSyncMessage(parsed.operation)) {
+        if (isSyncMessage(parsed.operation) || isPingMessage(parsed)) {
           // Sync operation > push in group's concurrent queue
           auto val = fdGroupLCPMap.find(msg.fd);
           if (val == fdGroupLCPMap.end()) {
@@ -185,6 +197,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
           queueMsg.fd = msg.fd;
           queueMsg.lcp = sock.lcp;
           queueMsg.query = msg.data;
+          queueMsg.pingMessage = isPingMessage(parsed);
 
           logger("Server : Pushing message to concurrent queue for group : ",
                  sock.group);
@@ -225,7 +238,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
           writeSocketQueue.push_back(response);
         } else if (parsed.operation == "GREGISTRATION_CONNECTION") {
           // From the perspective of LCP
-          // Type of a connection can be : receiver, sender, health
+          // Type of a connection can be : receiver, sender
 
           // Group should already exists at this point for each connection
           // as it is created in GREGISTRATION_LCP
@@ -234,7 +247,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
           //  Remove from current epoll monitoring
           //
           //  for type : sender
-          //  Add to fd-group-lcp hashmap
+          //  Add to fdGroupLCPMap
           if (parsed.reg.type == configCommon::RECEIVER_CONNECTION_TYPE) {
 
             // Remove from server thread epoll monitoring
@@ -326,9 +339,6 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
         }
       }
     }
-
-    readSocketQueue.pop_front();
-    pos++;
   }
 
   logger("Server : checking for triggering group eventFds");

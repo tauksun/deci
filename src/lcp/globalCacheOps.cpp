@@ -106,6 +106,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
   logger("globalCacheOps thread : In readFromSocketQueue");
   long pos = 0;
   long currentSize = readSocketQueue.size();
+  logger("globalCacheOps thread : readFromSocketQueue size : ", currentSize);
 
   while (pos < currentSize) {
     char buf[1024];
@@ -167,7 +168,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
         auto val = socketReqResMap.find(msg.fd);
         if (val != socketReqResMap.end()) {
           logger("globalCacheOps thread : adding to writeSocketQueue : ",
-                 msg.fd);
+                 val->second);
           WriteSocketMessage response;
           response.fd = val->second; // Fetched from the hashmap
           response.response = msg.data;
@@ -198,6 +199,8 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue,
         auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
                        std::chrono::system_clock::now().time_since_epoch())
                        .count();
+        logger("globalCacheOps thread : Updating timeMap for fd : ", msg.fd,
+               " now : ", now);
         timeMap[msg.fd] = now;
       }
     }

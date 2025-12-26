@@ -110,6 +110,13 @@ void epollIO(int epollFd, struct epoll_event *events,
         fd == pingResponseSocketPairFds[0]) {
       logger("CacheSynchronization thread : Reading from eventfd");
 
+      if (fd == pingResponseSocketPairFds[0]) {
+        logger("CacheSynchronization thread : pingResponseSocketPairFds[0] : ",
+               pingResponseSocketPairFds[0]);
+        pingResponseHandler();
+        continue;
+      }
+
       while (true) {
         uint64_t counter;
         int count = read(fd, &counter, sizeof(counter));
@@ -137,12 +144,6 @@ void epollIO(int epollFd, struct epoll_event *events,
         newConnHealthCheckEvent = true;
       }
 
-      if (fd == pingResponseSocketPairFds[0]) {
-        logger("CacheSynchronization thread : pingResponseSocketPairFds[0] : ",
-               pingResponseSocketPairFds[0]);
-        pingResponseHandler();
-      }
-
     } else {
 
       if (ev & EPOLLOUT) {
@@ -166,9 +167,10 @@ void epollIO(int epollFd, struct epoll_event *events,
 void readFromSocketQueue(
     std::deque<ReadSocketMessage> &readSocketQueue,
     moodycamel::ConcurrentQueue<Operation> &SynchronizationQueue,
-    std::deque<WriteSocketMessage> writeSocketQueue) {
+    std::deque<WriteSocketMessage> &writeSocketQueue) {
   // Read few bytes
   // If socket still has data, re-queue
+  logger("cacheSynchronization thread : In readFromSocketQueue");
 
   long pos = 0;
   long currentSize = readSocketQueue.size();
@@ -209,7 +211,7 @@ void readFromSocketQueue(
       } else if (parsed.error.invalid) {
         logger("cacheSynchronization thread : Invalid message : ", msg.data);
         onConnectionClose(msg.fd);
-      } else if (parsed.operation == "SYNC_PING") {
+      } else if (parsed.operation == "SYNC_PING_RESPONSE") {
         // Respond to GCP ping instead of pushing to SynchronizationQueue
         string res = "1";
         WriteSocketMessage response;
@@ -482,9 +484,9 @@ void startConnTimeout() {
   }
 }
 
-void startPoolHealthCheck(moodycamel::ConcurrentQueue<GlobalCacheOpMessage>
-                              &cacheSynchronizationQueue,
-                          int globalCacheThreadEventFd) {
+void startPoolHealthCheck(
+    moodycamel::ConcurrentQueue<GlobalCacheOpMessage> &GlobalCacheOpsQueue,
+    int globalCacheThreadEventFd) {
   logger("cacheSynchronization thread : In startPoolHealthCheck");
 
   // Create socketpair for communication between GlobalCacheOps &
@@ -501,6 +503,10 @@ void startPoolHealthCheck(moodycamel::ConcurrentQueue<GlobalCacheOpMessage>
     // let another iteration handle this
     return;
   }
+
+  logger("CacheSynchronization thread : Create socket pair : pairFd1 : ",
+         pingResponseSocketPairFds[0],
+         " pairFd2 : ", pingResponseSocketPairFds[1]);
 
   // Add for monitoring
   struct epoll_event ev;
@@ -520,23 +526,32 @@ void startPoolHealthCheck(moodycamel::ConcurrentQueue<GlobalCacheOpMessage>
     return;
   }
 
-  // Send message to cacheSynchronizationQueue > trigger
+  // Send message to GlobalCacheOpsQueue > trigger
   // globalCacheThreadEventFd
   vector<QueryArrayElement> pingArray;
   QueryArrayElement pingMessage;
   pingMessage.type = "string";
   pingMessage.value = "SYNC_PING";
   pingArray.push_back(pingMessage);
+
+  QueryArrayElement connectionsRequiredMessage;
+  connectionsRequiredMessage.type = "integer";
+  connectionsRequiredMessage.value = to_string(configLCP.MAX_SYNC_CONNECTIONS);
+  pingArray.push_back(connectionsRequiredMessage);
+
   string syncPing = encoder(pingArray);
 
+  logger("cacheSynchronization thread : Sending syncPing via GlobalCacheOps "
+         "connection : ",
+         syncPing);
   GlobalCacheOpMessage msg;
   msg.fd = pingResponseSocketPairFds[1];
   msg.op = syncPing;
 
   logger("CacheSynchronization thread : Enquing syncping message to "
-         "cacheSynchronizationQueue : ",
+         "GlobalCacheOpsQueue : ",
          syncPing);
-  cacheSynchronizationQueue.enqueue(msg);
+  GlobalCacheOpsQueue.enqueue(msg);
 
   logger("cacheSynchronization thread : triggering globalCacheThreadEventFd : ",
          globalCacheThreadEventFd);
@@ -593,8 +608,7 @@ writeToSocketQueue(std::deque<WriteSocketMessage> &writeSocketQueue) {
 void cacheSynchronization(
     moodycamel::ConcurrentQueue<Operation> &SynchronizationQueue,
     int synchronizationEventFd, string lcpId,
-    moodycamel::ConcurrentQueue<GlobalCacheOpMessage>
-        &cacheSynchronizationQueue,
+    moodycamel::ConcurrentQueue<GlobalCacheOpMessage> &GlobalCacheOpsQueue,
     int globalCacheThreadEventFd) {
 
   logger(
@@ -615,13 +629,13 @@ void cacheSynchronization(
     exit(EXIT_FAILURE);
   }
 
-  // Asynchronously establish connections with GCP
-  asyncConnect(configLCP.MAX_SYNC_CONNECTIONS);
-
   int pingTimerFd = createPingTimer();
   logger("CacheSynchronization thread : pingTimerFd : ", pingTimerFd);
   createNewConnTimer();
   logger("CacheSynchronization thread : newConnTimerFd : ", newConnTimerFd);
+
+  // Asynchronously establish connections with GCP
+  asyncConnect(configLCP.MAX_SYNC_CONNECTIONS);
 
   int timeout = -1;
   std::deque<ReadSocketMessage> readSocketQueue;
@@ -638,7 +652,7 @@ void cacheSynchronization(
     writeToSocketQueue(writeSocketQueue);
 
     if (poolHealthCheckEvent) {
-      startPoolHealthCheck(cacheSynchronizationQueue, globalCacheThreadEventFd);
+      startPoolHealthCheck(GlobalCacheOpsQueue, globalCacheThreadEventFd);
       poolHealthCheckEvent = false;
     }
 

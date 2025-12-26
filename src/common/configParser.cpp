@@ -138,6 +138,19 @@ void createConfig(I_CONFIG &configuration) {
        [&](const string &val) {
          (*configuration.gcp_config).SERVER_PORT = stoi(val);
        }},
+      {"IDLE_CONNECTION_TIME",
+       [&](const string &val) {
+         (*configuration.gcp_config).IDLE_CONNECTION_TIME = stoi(val);
+       }},
+      {"PING_CHECK_INTERVAL",
+       [&](const string &val) {
+         (*configuration.gcp_config).PING_CHECK_INTERVAL = stoi(val);
+       }},
+      {"CONNECTION_POOL_HEALTH_CHECK_INTERVAL",
+       [&](const string &val) {
+         (*configuration.gcp_config).CONNECTION_POOL_HEALTH_CHECK_INTERVAL =
+             stoi(val);
+       }},
   };
 
   string file;

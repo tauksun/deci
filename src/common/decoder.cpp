@@ -445,9 +445,32 @@ DecodedMessage decoder(string &str, bool extractLen) {
       offset += seekerLength + 2;
     }
 
-  } else if (op == "PING" || op == "SYNC_PING" ||
-             op == "SYNC_CONN_ESTABLISHED") {
+  } else if (op == "PING" || op == "SYNC_CONN_ESTABLISHED" ||
+             op == "SYNC_PING_RESPONSE") {
     return msg;
+  } else if (op == "SYNC_PING") {
+    // *2\r\n$9\r\nSYNC_PING\r\n:100\r\n
+
+    // Extract required connection by LCP
+    if (len < offset + 1) {
+      msg.error.partial = true;
+      return msg;
+    }
+
+    if (str[offset] != ':') {
+      msg.error.invalid = true;
+      return msg;
+    }
+    offset++;
+
+    int connectionsRequired = extractLength(offset, str);
+    if (connectionsRequired == -1) {
+      msg.error.partial = true;
+      return msg;
+    }
+
+    msg.value = to_string(connectionsRequired);
+    count++;
   } else {
     msg.error.invalid = true;
     return msg;

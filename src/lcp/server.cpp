@@ -135,6 +135,8 @@ void readFromSocketQueue(
   while (pos < currentSize) {
     char buf[1024];
     ReadSocketMessage msg = readSocketQueue.front();
+    readSocketQueue.pop_front();
+    pos++;
 
     int readBytes = read(msg.fd, buf, configLCP.MAX_READ_BYTES);
     if (readBytes == 0) {
@@ -220,9 +222,6 @@ void readFromSocketQueue(
         }
       }
     }
-
-    readSocketQueue.pop_front();
-    pos++;
   }
 
   // Trigger single event for n number of messages pushed

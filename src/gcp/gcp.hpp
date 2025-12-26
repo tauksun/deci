@@ -9,6 +9,7 @@ struct GroupConcurrentSyncQueueMessage {
   std::string lcp;
   std::string query;
   bool connectionRegistration = false;
+  int pingMessage = 0; // Stores the required connection by LCP
 };
 
 struct GroupQueueEventFd {
