@@ -47,7 +47,6 @@ int main() {
   std::thread WalSyncThread(walSync, ref(WalSyncQueue), walSyncEventFd, lcpId);
   WalSyncThread.detach();
 
-  // TODO: Learn more about this & the best practices around it
   serverThread.join();
   GlobalCacheOpsThread.join();
   SynchronizationThread.join();

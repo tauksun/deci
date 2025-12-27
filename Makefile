@@ -13,4 +13,4 @@ lcp:
 
 gcp:
 	@echo "Building GCP..."
-	clang++ $(CXXFLAGS) ./src/gcp/gcp.cpp ./src/gcp/group.cpp ./src/gcp/health.cpp ./src/gcp/server.cpp ./src/common/decoder.cpp ./src/common/encoder.cpp ./src/common/logger.cpp ./src/common/makeSocketNonBlocking.cpp ./src/common/operate.cpp ./src/common/responseDecoder.cpp ./src/common/randomId.cpp ./src/common/configParser.cpp ./src/gcp/config.cpp ./src/common/wal.cpp ./src/gcp/wal.cpp -o ./build/gcp
+	clang++ $(CXXFLAGS) ./src/gcp/gcp.cpp ./src/gcp/group.cpp ./src/gcp/server.cpp ./src/common/decoder.cpp ./src/common/encoder.cpp ./src/common/logger.cpp ./src/common/makeSocketNonBlocking.cpp ./src/common/operate.cpp ./src/common/responseDecoder.cpp ./src/common/randomId.cpp ./src/common/configParser.cpp ./src/gcp/config.cpp ./src/common/wal.cpp ./src/gcp/wal.cpp -o ./build/gcp

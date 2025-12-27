@@ -177,6 +177,7 @@ void readFromSocketQueue(
         errorMessage.fd = msg.fd;
         errorMessage.response = encoder(&res, "error");
         writeSocketQueue.push_back(errorMessage);
+        close(msg.fd);
       } else {
         logger("Server : Successfully parsed");
         drainSocketSync(msg.fd);

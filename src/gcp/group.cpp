@@ -538,6 +538,7 @@ void readFromSocketQueue(std::deque<ReadSocketMessage> &readSocketQueue) {
       } else if (parsed.error.invalid) {
         logger("Group : Invalid message : ", msg.data, " fd : ", msg.fd);
         drainSocketSync(msg.fd);
+        onConnectionClose(msg.fd, fdLcp->second);
       } else {
         drainSocketSync(msg.fd);
         logger("Group : Successfully received sync response for fd : ", msg.fd);

@@ -218,6 +218,9 @@ void writeToApplicationSocket(
 
   while (pos < currentSize) {
     WriteSocketMessage response = writeSocketQueue.front();
+    writeSocketQueue.pop_front();
+    pos++;
+
     logger("globalCacheOps thread : Writing to fd : ", response.fd,
            " response : ", response.response);
 
@@ -248,9 +251,6 @@ void writeToApplicationSocket(
       response.response = response.response.substr(writtenBytes);
       writeSocketQueue.push_back(response);
     }
-
-    writeSocketQueue.pop_front();
-    pos++;
   }
 }
 
