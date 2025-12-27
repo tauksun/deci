@@ -4,7 +4,6 @@
 #include "../deps/concurrentQueue.hpp"
 #include "config.hpp"
 #include "globalCacheOps.hpp"
-#include "health.hpp"
 #include "registration.hpp"
 #include "server.hpp"
 #include "synchronizationOps.hpp"
@@ -40,18 +39,15 @@ int main() {
   // Synchronously register with GCP
   lcpRegistration();
 
-  // std::thread healthThread(health);
   std::thread GlobalCacheOpsThread(globalCacheOps, ref(GlobalCacheOpsQueue),
                                    globalCacheThreadEventFd, lcpId);
-  std::thread SynchronizationThread(cacheSynchronization,
-                                    ref(SynchronizationQueue),
-                                    synchronizationEventFd, lcpId);
+  std::thread SynchronizationThread(
+      cacheSynchronization, ref(SynchronizationQueue), synchronizationEventFd,
+      lcpId, ref(GlobalCacheOpsQueue), globalCacheThreadEventFd);
   std::thread WalSyncThread(walSync, ref(WalSyncQueue), walSyncEventFd, lcpId);
   WalSyncThread.detach();
 
-  // TODO: Learn more about this & the best practices around it
   serverThread.join();
-  // healthThread.join();
   GlobalCacheOpsThread.join();
   SynchronizationThread.join();
 
