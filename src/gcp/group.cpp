@@ -723,9 +723,9 @@ void readFromGroupConcurrentSyncQueue(
         pair.second.pop_front();
 
         // Add to activeConnections
-        logger("Group : Adding to activeConnections for lcp : ", msg.lcp,
+        logger("Group : Adding to activeConnections for lcp : ", pair.first,
                " fd : ", sock);
-        auto ac = activeConnectionsMap.find(msg.lcp);
+        auto ac = activeConnectionsMap.find(pair.first);
         if (ac != activeConnectionsMap.end()) {
           ac->second.insert(sock);
           logger("Group : Added to activeConnections : sock : ", sock);
